@@ -1,0 +1,145 @@
+# This is the makefile for macOS to build pdpclib using
+# the clang compiler. Note that it will gain an external
+# dynamic library reference to /usr/lib/libSystem.B.dylib
+# but that is both unused and necessary (quibbling aside),
+# otherwise MacOS will refuse to load the executable (if
+# you attempt to do a static link). clang is used to do
+# the link step for this reason - because the ld command
+# to do the same thing is a bit difficult, ie:
+# -lSystem -syslibroot `xcrun -sdk macosx --show-sdk-path`
+# -e ___pdpstart (add -arch arm64 to do cross-compile)
+# And e.g. clang -arch x86_64 world.c
+# does a cross-compile for x86_64, which still runs on ARM64
+
+# Note that we attempt to set the minimum os version to 10,
+# but there wasn't an ARM version of MacOS until version 11:
+# https://en.wikipedia.org/wiki/MacOS_version_history
+# so it automatically changes it to 11 - the real
+# minimum possible. I prefer to let the compiler set the
+# correct minimum instead of me typing it in, so this way
+# it does it itself.
+
+# Note that x64 syscalls look like this:
+# mov rax, 0x2000001  (1 = exit)
+# syscall
+# with parameters in rdi, rsi, rdx, r10, r8, r9
+
+# Assembler can be done like this:
+# as -arch x86_64 -o testmac.o testmac.asm
+# ld -static -e fred -o testmac testmac.o
+# ie you can do a static link, and no signing required
+
+# These don't appear to be needed for either clang or gcc:
+#    -D__USEBIVA__ -D__NOSPECBIVA__
+# But nor do they do any harm.
+# I believe the first is being automatically set in stdarg.h
+# and the second the ARM64 compilers are smart enough to
+# accept with or without an address.
+
+
+# use:
+# pdmake tools=mac -f makefile.m64
+# if on a Mac using xcode or whatever it is called
+
+
+ifeq "$(tools)" "mac"
+CC=clang -mmacosx-version-min=10
+AS=as -mmacosx-version-min=10
+AR=ar
+SIGN=codesign -s - -o linker-signed
+STRIP=strip
+
+else
+# x18 is a reserved register for Windows and MacOS system use,
+# I believe, so we disable the use of that
+CC=gcc -fleading-underscore --no-pie -ffixed-x18
+AS=as
+AR=xar
+# On Linux we can use zsign from https://github.com/zhlynn/zsign
+SIGN=zsign -q -a
+# When running on Linux, strip doesn't recognize MacOS executables
+STRIP=echo not stripping
+endif
+
+
+COPTS=-c -O2 -D__ARM__ -fno-builtin -D__MACOS__ \
+    -DXNEED_MPROTECT \
+    -DXUSE_MEMMGR -DXKLUDGE_MAC -D__64BIT__ -D__LONG64__ \
+    -nostdinc \
+    -I . -fno-stack-protector
+
+
+# This has no effect
+# -mdynamic-no-pic
+
+# MacOS refuses to run an executable unless it has
+# been "signed" by something.
+# This removes an existing signature:
+# codesign --remove-signature pdptest
+# This displays an existing signature:
+# codesign -d pdptest
+# This creates an adhoc signature, but an
+# adhoc-only cannot be stripped, and thus inappropriate
+# codesign -s - pdptest
+# This is what we need, adhoc, linker style:
+# codesign -s - -o linker-signed pdptest
+
+# Unfortunately codesign embeds a large
+# LC_CODE_SIGNATURE
+# load command in the executable, as shown by:
+# otool -l pdptest
+
+# I can't find an option to stop that being inserted.
+# Nor can I find a strip option to delete just that.
+# So that we get an executable the same size as ld would
+# have produced, with the symbols intact.
+
+# I'm stripping symbols anyway, so I'm not affected.
+# Others will have to live with the larger size,
+# or remove the -no_adhoc_codesign option from ld
+
+# I'm also using no_uuid so that the 16-byte UUID
+# doesn't show up when comparing executables. Random
+# numbers are even allowed for this, so shouldn't be
+# an issue. I didn't see an option to set it to NULs
+# The signature still shows up as an extra difference
+# though. I don't know a way around that.
+
+# entry points of both __start and ___start work
+# (underscores are being added to function names for some reason)
+# But __start is the one we want (in linstart), although
+# we may want to use a ___pdpent instead at some point
+
+ifeq "$(tools)" "mac"
+
+LD=clang -mmacosx-version-min=10 \
+    -Wl,-no_uuid -Wl,-no_adhoc_codesign \
+    -Wl,-e, -Wl,___pdpent
+ifeq "$(altld)" "pdld"
+LD=pdld --oformat macho -e ___pdpent --emit-relocs
+endif
+
+else
+LD=pdld --oformat macho -e ___pdpent --emit-relocs
+endif
+
+
+pdptest: linstart.o m64supa.o pdptest.o stdio.o string.o stdlib.o \
+       start.o time.o errno.o assert.o signal.o locale.o \
+       ctype.o math.o __memmgr.o
+	rm -f pdpmacos.a
+	$(AR) r pdpmacos.a linstart.o m64supa.o stdio.o string.o stdlib.o
+	$(AR) r pdpmacos.a start.o time.o errno.o assert.o signal.o
+	$(AR) r pdpmacos.a locale.o ctype.o math.o __memmgr.o
+	$(AR) s pdpmacos.a
+	rm -f pdptest
+	$(LD) -o pdptest linstart.o m64supa.o pdptest.o pdpmacos.a
+	chmod 755 pdptest
+        $(SIGN) pdptest
+        $(STRIP) pdptest
+
+.c.o:
+	$(CC) $(COPTS) $<
+
+m64supa.o: m64supa.asm
+	$(AS) -o $@ $*.asm

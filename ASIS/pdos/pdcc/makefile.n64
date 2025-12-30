@@ -1,0 +1,64 @@
+# You need to have run makefile.n64 in pdpclib first
+
+# Note that we need to link with x64supa.obj because we
+# need the routines to support cc64-compiled programs,
+# and that is not in the library itself. But you will
+# get an error at run-time, not link time, if you don't
+# include it, due to cc64 limitations.
+
+
+TDIR=x64
+
+CPP=pdcc
+
+ifeq "$(tools)" "mcc"
+CC=mcc
+CFLAGS=
+else
+# cc64 goes haywire in multiple places if const is used
+# so we suppress it
+CC=cc64 -D__CC64__ -Dconst=
+CFLAGS=
+endif
+
+LD=pdld
+LDFLAGS=-s -nostdlib --no-insert-timestamp --image-base 0x400000
+AS=pdas --oformat coff --64
+
+COPTS=-Icclib -Icclib/include -Icpplib -Icpplib/include \
+    -I. -I../pdpclib -D__WIN32__ -D__NOBIVA__ -D__64BIT__
+
+OBJS=main.obj c_ppout.obj inc_path.obj \
+          cpplib/core.obj cpplib/directs.obj cpplib/errors.obj \
+          cpplib/expr.obj cpplib/files.obj cpplib/chars.obj \
+          cpplib/idents.obj cpplib/init.obj cpplib/lex.obj \
+          cpplib/macro.obj cpplib/support.obj cpplib/symtab.obj \
+          cclib/cclib.obj cclib/$(TDIR)/asgen.obj cclib/lexer.obj cclib/diag.obj \
+          xmalloc.obj
+
+TARGET=pdcc.exe
+
+all: clean $(TARGET)
+
+$(TARGET): $(OBJS)
+  $(LD) $(LDFLAGS) -o $(TARGET) ../pdpclib/w32start.obj $(OBJS) ../pdpclib/x64supa.obj ../pdpclib/msvcrt.lib
+#  pdcc -E abc.c
+
+.c.obj:
+  $(CPP) -E $(COPTS) -o $*.i $<
+ifeq "$(tools)" "mcc"
+  $(CC) -o:$*.s $*.i
+else
+  $(CC) -c -out:$@ $*.i
+endif
+  rm -f $*.i
+ifeq "$(tools)" "mcc"
+  $(AS) -o $@ $*.s
+  rm -f $*.s
+endif
+
+.asm.obj:
+  $(AS) -o $@ $<
+
+clean:
+  rm -f $(OBJS) $(TARGET)

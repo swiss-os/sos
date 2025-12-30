@@ -1,0 +1,54 @@
+# Released to the public domain.
+#
+# Anyone and anything may copy, edit, publish,
+# use, compile, sell and distribute this work
+# and all its parts in any form for any purpose,
+# commercial and non-commercial, without any restrictions,
+# without complying with any conditions
+# and by any means.
+
+# This makefile builds pload.com for PDOS/386 on Windows,
+# using the Open Watcom toolchain.
+
+# Note that if you are doing debugging using dumpbuf etc,
+# you will need to load more sectors in the boot sector.
+# May as well just make it the max of 58
+
+# To produce the 32-bit version, do this:
+# pdmake -f makeio.std TARG=PDOS32
+
+VPATH=..\pdpclib
+
+TARG=XPDOS32
+
+CC=wcl
+CFLAGS=-oneatx
+COPTS=-ecc -q -w -c -I. -I..\pdpclib -DNEWMODEL -mh -D__SZ4__ -zl -D__MSDOS__ -D$(TARG) -DNEED_DUMP -fpi87 -s -zdp -zu $(CFLAGS)
+AR=xar
+
+OBJS=support.obj bos.obj dossupc.obj minifat.obj string.obj pdosload.obj \
+    lldos.obj protinta.obj file.obj protint.obj ctype.obj pload.obj \
+    ploadst.obj int13x.obj dossupa.obj
+
+all: clean pload.com
+
+pload.com: $(OBJS)
+  $(AR) s watcom.lib
+  ld86 -Map map.txt -o pload.com --oformat binary -Ttext 0x700 ploadst.obj pload.obj int13x.obj dossupa.obj dossupc.obj bos.obj watcom.lib
+#  pdld -Map map.txt -o pload.com --oformat binary --image-base 0x700 ploadst.obj pload.obj int13x.obj dossupa.obj dossupc.obj bos.obj watcom.lib
+
+.c.obj:
+  $(CC) $(COPTS) -fo=$*.obj $<
+  wdis -a -l=$*.tas $*.obj
+  as86 -o $@ $*.tas
+  rm -f $*.tas
+  $(AR) r watcom.lib $@
+
+.asm.obj:
+  as86 -DAS86 -Dmemodel=huge -DNEWMODEL -DWATCOMC -DNEED_DISPLAYC -o $@ $<
+  $(AR) r watcom.lib $@
+
+clean:
+  rm -f *.obj
+  rm -f pload.com
+  rm -f watcom.lib

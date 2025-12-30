@@ -1,0 +1,43 @@
+# Build MSDOS executable using Turbo C++ and wasmr etc
+
+# Use pdmake like this:
+# pdmake -B -f makefile.wcd
+
+# Use Watcom make like this:
+# wmake -m -h -e -a -ms -f makefile.wcd
+
+# Use Borland make (in either Turbo C++ 1.01 or Turbo C 2.01) like this:
+# make -fmakefile.dos
+
+# Use Microsoft nmake like this:
+# nmake -f makefile.dos
+# But I found that I had to copy all the tools into the
+# current directory for them to be found (on Windows 2000)
+
+
+# Note that we put last.lib last in the hope that it will
+# have the last bit of data and the last bit of bss, so
+# that we can clear the BSS
+
+
+CC=tcc
+COPTS=-O -w -c -I. -ml
+
+pdptest.exe: dosstart.obj pdptest.obj stdio.obj string.obj stdlib.obj \
+       start.obj time.obj errno.obj assert.obj signal.obj locale.obj \
+       ctype.obj setjmp.obj math.obj dossupc.obj dossupa.obj dossupb.obj
+  del borland.lib
+  del last.lib
+  tlib borland +dosstart.obj +stdio.obj +string.obj +stdlib.obj
+  tlib borland +start.obj +time.obj +errno.obj +assert.obj +signal.obj
+  tlib borland +locale.obj +ctype.obj +setjmp.obj +math.obj
+  tlib borland +dossupc.obj +dossupa.obj
+  tlib last +dossupb.obj
+  tlink dosstart+pdptest,pdptest.exe,nul.map,borland.lib+last.lib,
+
+.c.obj:
+  $(CC) $(COPTS) $<
+
+.asm.obj:
+  wasmr -q -zcm -dmemodel=large $<
+#  masm -Dmemodel=large -D@model=5 -D@codesize=1 -D@datasize=1 $<,,,,

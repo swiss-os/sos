@@ -1,0 +1,37 @@
+# Released to the public domain.
+#
+# Anyone and anything may copy, edit, publish,
+# use, compile, sell and distribute this work
+# and all its parts in any form for any purpose,
+# commercial and non-commercial, without any restrictions,
+# without complying with any conditions
+# and by any means.
+
+# This makefile builds 32-bit pcomm.exe (COMMAND.EXE) on Windows.
+# makefile.std in PDPCLIB must be used before using this makefile to produce the msvcrt.lib.
+
+CC=gccwin
+CFLAGS=-O2 -ansi
+COPTS=$(CFLAGS) -S -fno-common -D__WIN32__ -D__32BIT__ -I../pdpclib
+AS=pdas
+LD=pdld
+
+TARGET=pcomm.exe
+OBJS=pcomm.obj dostime.obj pos.obj supportf.obj
+
+all: clean $(TARGET)
+
+$(TARGET): $(OBJS)
+  $(LD) -s -Map map.txt --no-insert-timestamp -o $(TARGET) ../pdpclib/w32start.obj $(OBJS) ../pdpclib/msvcrt.lib
+
+.c.obj:
+  $(CC) $(COPTS) -o $*.s $<
+  $(AS) --oformat coff -o $@ $*.s
+  rm -f $*.s
+
+.asm.obj:
+  as86 -f coff -o $@ $<
+
+clean:
+  rm -f *.obj
+  rm -f $(TARGET)

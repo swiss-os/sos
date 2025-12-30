@@ -1,0 +1,75 @@
+# This is the new standard for z/Arch Windows
+# It produces an msvcrt.dll that allows you to run a
+# subset of Win32 executables
+
+# You should have run makek32.z32 in src first
+
+
+CC=gccmvs
+AS=as370 -mhlasm -mebcdic
+LD=pdlde --oformat coff
+
+#CC=gccmvsa
+#AS=as370 -mhlasm
+#LD=pdld --oformat coff
+
+CFLAGS=-Os -ansi
+COPTS=$(CFLAGS) -S -D__MF32__ -D__WIN32__ \
+    -I . -DNOLIBALLOC -fno-common \
+    -D__NODECLSPEC__ -U__MVS__ -D__SHORTNAMES__ \
+    -D__PDPCLIB_DLL \
+    -I ../src -D__NOBIVA__ -I ../generic
+AR=xar
+
+CPP=pdcc -N
+
+
+ifeq "$(tgtchs)" "ebcdic"
+COPTS:=$(COPTS) -funsigned-char
+endif
+
+
+all: pdptest.exe
+
+pdptest.exe: w32start.obj pdptest.obj stdio.obj string.obj stdlib.obj \
+       start.obj time.obj errno.obj assert.obj signal.obj locale.obj \
+       ctype.obj setjmp.obj math.obj dllcrt.obj \
+       mfsupa.obj
+  rm -f temp.lib
+  $(AR) r temp.lib stdio.obj string.obj stdlib.obj
+  $(AR) r temp.lib start.obj time.obj errno.obj assert.obj signal.obj
+  $(AR) r temp.lib locale.obj ctype.obj setjmp.obj math.obj
+  $(AR) r temp.lib mfsupa.obj
+  $(AR) s temp.lib
+  $(LD) -s --export-all-symbols --no-insert-timestamp -o msvcrt.dll --shared --out-implib msvcrt.lib dllcrt.obj temp.lib ../src/kernel32.lib
+  rm -f temp.lib
+  $(LD) -s -nostdlib --no-insert-timestamp --emit-relocs -o pdptest.exe w32start.obj mfsupa.obj pdptest.obj setjmp.obj msvcrt.lib
+
+w32start.obj: w32start.c
+  $(CC) -S -O2 -DNOUNDMAIN -D__WIN32__ -D__NODECLSPEC__ -D__NOSTDCALL__ -D__MF32__ -U__MVS__ -fno-common -D__NOBIVA__ -I . -I ../src -o $*.s $*.c
+  $(AS) -o $*.obj $*.s
+  rm -f $*.s
+
+pdptest.obj: pdptest.c
+  $(CC) -S -O2 -D__WIN32__ -D__NODECLSPEC__ -D__NOSTDCALL__ -D__MF32__ -U__MVS__ -fno-common -D__NOBIVA__ -I . -I ../src -o $*.s $*.c
+  $(AS) -o $*.obj $*.s
+  rm -f $*.s
+
+dllcrt.obj: dllcrt.c
+  $(CC) $(COPTS) -D__EXPORT__ -DNEED_START -D__NODECLSPEC__ -D__NOSTDCALL__ -D__MF32__ -U__MVS__ -fno-common -D__NOBIVA__ -o $*.s $*.c
+  $(AS) -o $*.obj $*.s
+  rm -f $*.s
+
+.c.obj:
+  $(CC) $(COPTS) -o $*.s $<
+  $(AS) -o $*.obj $*.s
+  rm -f $*.s
+
+.asm.obj:
+  $(CPP) -o $*.s $<
+  $(AS) -mhlasm -mebcdic -o $@ $*.s
+  rm -f $*.s
+
+clean:
+  rm -f *.obj
+  rm -f pdptest.exe

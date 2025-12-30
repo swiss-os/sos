@@ -1,0 +1,88 @@
+# Released to the public domain.
+#
+# Anyone and anything may copy, edit, publish,
+# use, compile, sell and distribute this work
+# and all its parts in any form for any purpose,
+# commercial and non-commercial, without any restrictions,
+# without complying with any conditions
+# and by any means.
+
+# This builds the 64-bit version of kernel32.dll
+# using cc64
+
+# Note that we export all symbols because cc64 isn't
+# generating the required .drectve section. We may
+# revisit this situation at a later date. If not by
+# changing cc64 then perhaps allowing a definition file.
+
+VPATH=../pdpclib
+
+CPP=pdcc
+
+ifeq "$(tools)" "mcc"
+CC=mcc
+else
+CC=cc64
+endif
+
+CFLAGS=
+COPTS=$(CFLAGS) -D__WIN32__ -D__STATIC__ -I ../pdpclib -I . -DNOLIBALLOC -D__64BIT__
+AS=pdas --oformat coff --64
+LD=pdld --implib-compat
+#LD=pdld
+
+EXPORT_OBJS=dllcrt.obj kernel32.obj
+OBJS=pdossupc.obj pos.obj string.obj supportc.obj
+
+all: clean kernel32.dll
+
+kernel32.dll: $(EXPORT_OBJS) $(OBJS)
+  $(LD) --export-all-symbols --no-insert-timestamp --image-base 0x400000 -s -o kernel32.dll --shared --kill-at --out-implib kernel32.lib $(EXPORT_OBJS) $(OBJS)
+
+
+dllcrt.obj: ../pdpclib/dllcrt.c
+  $(CPP) -E $(COPTS) -D__EXPORT__ -o $*.i $<
+ifeq "$(tools)" "mcc"
+  $(CC) -o:$*.s $*.i
+else
+  $(CC) -q -c -out:$@ $*.i
+endif
+  rm -f $*.i
+ifeq "$(tools)" "mcc"
+  $(AS) -o $@ $*.s
+  rm -f $*.s
+endif
+
+
+kernel32.obj: kernel32.c
+  $(CPP) -E $(COPTS) -D__EXPORT__ -o $*.i $<
+ifeq "$(tools)" "mcc"
+  $(CC) -o:$*.s $*.i
+else
+  $(CC) -q -c -out:$@ $*.i
+endif
+  rm -f $*.i
+ifeq "$(tools)" "mcc"
+  $(AS) -o $@ $*.s
+  rm -f $*.s
+endif
+
+
+.c.obj:
+  $(CPP) -E $(COPTS) -o $*.i $<
+ifeq "$(tools)" "mcc"
+  $(CC) -o:$*.s $*.i
+else
+  $(CC) -q -c -out:$@ $*.i
+endif
+  rm -f $*.i
+ifeq "$(tools)" "mcc"
+  $(AS) -o $@ $*.s
+  rm -f $*.s
+endif
+
+
+clean:
+  rm -f *.obj
+  rm -f kernel32.dll
+  rm -f kernel32.lib

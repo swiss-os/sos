@@ -1,0 +1,83 @@
+# This is the makefile for Linux x64 to build pdpclib using
+# the gcc mingw-w64 compiler to produce EBCDIC
+# Win64 x64 PE/COFF executables suitable for running under
+# PDOS-generic built with generic/makefile.leb.
+
+# You need to have built makek32.web first
+
+# You need to use an EBCDIC version of pdld - called
+# pdlde here
+
+# The mingw64 compiler should have been built like this:
+# ./configure --target=x86_64-mingw64 --disable-multilib --enable-languages=c
+# make
+
+# And you should first apply this public domain patch to libcpp/charset.cc
+# in gcc 15.2.0 - or do the equivalent.
+# 654a655,657
+# >       char *out_before = outbuf;
+# >       char *out_after;
+# >       char *out_p;
+# 655a659,664
+# >       out_after = outbuf;
+# >       while ((out_p =
+# >               (char *)memchr(out_before, 0x25, out_after - out_before)) != NULL)
+# >       {
+# >           *out_p = 0x15;
+# >       }
+
+# so that the EBCDIC newline character is x'15' instead of x'25'.
+
+# And you will need a system with an iconv that can convert from UTF-8
+# to IBM1047, such as Debian Linux x64 (not Debian Linux ARM64)
+
+CC=gcc
+COPTS=-S -O2 -fno-builtin -D__64BIT__ -I . -m64 \
+    -mno-red-zone \
+    -fno-common -U__gnu_linux__ -fno-stack-protector \
+    -D__USEBIVA__ -D__NOSPECBIVA__ \
+    -nostdlib -nostdinc \
+    -D__WIN32__ --no-pie -fno-leading-underscore \
+    -I../src -D__EBCDIC__
+
+# Use EBCDIC
+COPTS:=$(COPTS) -funsigned-char \
+    -fexec-charset=IBM1047
+
+AR=xar
+
+AS=pdas --64 --oformat coff
+#AS=as --64
+
+LD=pdlde --64 --oformat coff -nostdlib --emit-relocs
+
+pdptest: w32start.obj x64supa.obj pdptest.obj stdio.obj \
+       string.obj stdlib.obj dllcrt.obj \
+       start.obj time.obj errno.obj assert.obj signal.obj \
+       locale.obj ctype.obj setjmp.obj math.obj __memmgr.obj
+  rm -f temp.lib
+  $(AR) r temp.lib stdio.obj string.obj stdlib.obj x64supa.obj
+  $(AR) r temp.lib start.obj time.obj errno.obj assert.obj signal.obj
+  $(AR) r temp.lib locale.obj ctype.obj setjmp.obj math.obj
+  $(AR) s temp.lib
+  $(LD) -s --implib-compat --no-insert-timestamp --image-base 0x400000 -o msvcrt.dll --shared --out-implib msvcrt.lib dllcrt.obj temp.lib ../src/kernel32.lib
+  rm -f temp.lib
+  $(LD) -s -nostdlib --no-insert-timestamp --image-base 0x400000 -o pdptest.exe w32start.obj pdptest.obj msvcrt.lib
+
+pdptest.obj: pdptest.c
+    $(CC) $(COPTS) -o $*.s $<
+    $(AS) -o $@ $*.s
+    rm -f $*.s
+
+dllcrt.obj: dllcrt.c
+    $(CC) $(COPTS) -D__EXPORT__ -DNEED_START -o $*.s $<
+    $(AS) -o $@ $*.s
+    rm -f $*.s
+
+.c.obj:
+	$(CC) $(COPTS) -D__PDPCLIB_DLL -o $*.s $<
+        $(AS) -o $@ $*.s
+        rm -f $*.s
+
+x64supa.obj: x64supa.asm
+  pdas --oformat coff --defsym PDAS=1 --defsym NOUNDMAIN=1 --no-pseudo-dot --64 -o $@ $<

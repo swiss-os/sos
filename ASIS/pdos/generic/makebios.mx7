@@ -1,0 +1,54 @@
+# Produces MachOS x64 executable using mcc compiler.
+# We link with the library produced by makefile.mx7
+
+CPP=pdcc -E
+CC=mcc
+#CC=mcc -long64
+
+COPTS=-D__MACOS__ \
+    -DXNEED_MPROTECT \
+    -DXUSE_MEMMGR \
+    -D__64BIT__ \
+    -I . \
+    -D__gnu_linux__ \
+    -D__NOBIVA__ \
+    -U__WIN32__ \
+    -I../pdpclib -I../bios -I. -I../src -DNEED_ELF \
+    -DTARGET_64BIT -DNEED_MZ -DNO_DLLENTRY \
+    -D__GENSHELL__ -DGENSHELL \
+    -DW64EMUL -D__W64SHELL__ \
+    -DHAVE_DIR -DLINDIR
+
+
+AS=sasm -f win64
+GAS=pdas --64 --oformat coff
+
+AR=xar
+
+# pdld is using LC_MAIN, but the assembler entry
+# point can handle that and will take care of argc
+# and argv being in different registers from what mcc uses
+LD=pdld --oformat macho -e __pdpent
+
+
+
+all: clean bios.exe
+
+OBJS=list.obj ../bios/exeload.obj ../src/patmat.obj
+# w32hack.obj
+
+bios.exe: bios.obj $(OBJS)
+    $(LD) -o bios.exe ../pdpclib/linstart.o bios.obj $(OBJS) ../pdpclib/pdpmacos.a
+
+.c.obj:
+    $(CPP) $(COPTS) -o $*.i $<
+    $(CC) -s -o:$*.s $*.i
+    rm -f $*.i
+    $(GAS) -o $@ $*.s 
+    rm -f $*.s
+
+.asm.obj:
+    $(AS) -o $@ $<
+
+clean:
+    rm -f *.obj bios.exe

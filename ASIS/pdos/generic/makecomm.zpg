@@ -1,0 +1,24 @@
+# This builds a PDOS-generic executable for the mainframe
+# This is self-contained
+
+CC=gccmvs
+COPTS=-S -Os -fno-common -U__MVS__ -D__MF32__ -D__PDOSGEN__ \
+   -DHAVE_DIR -D__NOBIVA__ -I . -I../pdpclib -I../src
+AS=as370 -mhlasm -mebcdic
+
+all: clean pcomm.exe
+
+pcomm.exe: ../pdpclib/pgastart.o pcomm.o
+  rm -f pcomm.exe
+  pdld --oformat mvs -e __crt0 -o pcomm.exe ../pdpclib/pgastart.o pcomm.o
+
+.c.o:
+  $(CC) $(COPTS) -o $*.s $<
+  $(AS) -o $@ $*.s
+  rm -f $*.s
+
+.asm.obj:
+  $(AS) -o $@ $<
+
+clean:
+  rm -f pcomm.exe

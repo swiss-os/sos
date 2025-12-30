@@ -1,0 +1,47 @@
+# produce pdos.exe as a mainframe executable
+# You must have built pdpclib with makefile.zpo first
+
+# PDOS386 should be renamed to PDOSGENOS
+
+# BIGFOOT is currently incompatible as it forces ASCII
+
+# Not sure if there is a better way to do the OS2CM2
+# ie stop relying on a second command line because (I
+# think) the first one has been split up already.
+
+CC=gccmvs
+AS=as370 -mhlasm -mebcdic
+COPTS=-S -Os -fno-common -U__MVS__ -D__MF32__ -D__PDOS386__ \
+    -D__NOBIVA__ -I . -I../pdpclib -I../src -I../bios -DNEED_MVS \
+    -DUSE_MEMMGR -DDONT_MM -fno-builtin -DEBCDIC -DNEED_VSE \
+    -DNEED_ELF -DXNEED_BIGFOOT -DNEED_MZ -DNO_DLLENTRY \
+    -DNEEDCBIG -I../hwzip -DWINNEWMOD -D__EXPORT__ -D__HALFEXP__ \
+    -D__SHORTNAMES__ -DNOLIBALLOC -DCASEINS -D__GENSHELL__ \
+    -DZSHIM -DNEED_OS2 -D__32BIT__ -DOS2CM2 -ansi -pedantic
+
+OBJ=genstart.o pdos.o list.o ../bios/exeload.o \
+   ../pdpclib/__memmgr.o ../src/fat.o \
+   ../hwzip/fasc.o ../src/kernel32.o \
+   ../src/patmat.o ../src/helper.o \
+   zshim.o ../src/doscalls.o
+
+CPP=pdcc -N
+
+all: clean pdos.exe
+
+pdos.exe: $(OBJ)
+  rm -f pdos.exe
+  pdld --oformat mvs -e __crt0 -o pdos.exe $(OBJ) ../pdpclib/pdosgeno.a
+
+.c.o:
+  $(CC) $(COPTS) -o $*.s $<
+  $(AS) -o $@ $*.s
+  rm -f $*.s
+
+.asm.o:
+  $(CPP) -o $*.s $<
+  $(AS) -mhlasm -mebcdic -o $@ $*.s
+  rm -f $*.s
+
+clean:
+  rm -f pdos.exe

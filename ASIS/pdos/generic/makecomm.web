@@ -1,0 +1,47 @@
+# This builds a PDOS-generic executable
+# No need to build a library, this is self-contained
+
+# The executable can be run under the BIOS built
+# with makebios.leb or the PDOS-generic OS built
+# with makefile.web
+
+# The executable is in PE format
+
+# I think we should remove the PDOS386 define
+
+CC=gcc
+COPTS=-S -O2 -fno-builtin -D__64BIT__ -I . -m64 \
+    -mno-red-zone \
+    -fno-common -U__gnu_linux__ -fno-stack-protector \
+    -D__USEBIVA__ -nostdlib -nostdinc \
+    -U__WIN32__ --no-pie -fno-leading-underscore \
+    -I . \
+    -I../pdpclib -I../src -I. -I../src -DNEED_ELF \
+    -DHAVE_DIR -D__PDOS386__ -D__PDOSGEN__ \
+    -DNEED_UNDMAIN -D__EBCDIC__
+
+# We will also need the charset conversion functions for
+# dealing with directory entries
+
+# Use EBCDIC
+COPTS:=$(COPTS) \
+    -funsigned-char \
+    -fexec-charset=IBM1047
+
+AS=pdas --64 --oformat coff
+#AS=as --64
+LD=pdlde --64 --oformat coff -nostdlib --emit-relocs
+
+all: clean pcomm.exe
+
+pcomm.exe: ../pdpclib/pgastart.obj pcomm.obj ../pdpclib/string.obj
+  rm -f pcomm.exe
+  $(LD) -s -e __crt0 -o pcomm.exe ../pdpclib/pgastart.obj pcomm.obj ../pdpclib/string.obj
+
+.c.obj:
+  $(CC) $(COPTS) -o $*.s $<
+  $(AS) -o $@ $*.s
+  rm -f $*.s
+
+clean:
+  rm -f pcomm.exe

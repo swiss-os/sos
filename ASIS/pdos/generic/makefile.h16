@@ -1,0 +1,78 @@
+# Produce an NE (16-bit) executable using Microsoft C
+# that helps us run 16-bit programs x86 programs on an x64
+
+# Choose t (tiny), s (small), m (medium), c (compact), l (large), h (huge)
+MODELC=H
+# Choose long form of above name, required by wasm instead of wcl
+MODELA=huge
+
+# If you want to use a 32-bit size_t in huge memory model, uncomment this
+SZ4=-D__SZ4__
+
+# If you are using masm 6.11 or older, there is no -omf and you will get
+# a warning (which cannot be ignored as it consumes the next parameter).
+# 6.15 has -omf but defaults to omf.
+# 8.0 defaults to coff. If you have obtained a copy of Visual C++ 1.52C
+# or earlier, you need to marry it up with either the standalone masm 6.11
+# or obtain a later version of Visual C++ (7.0 or above - 6.0 is sort of
+# possible too - that's where the 6.15 reference comes from), and ignore
+# the (Windows-only) C compiler and just get the assembler. And you will
+# then need to add "OMF=-omf" to that more modern assembler when you run
+# pdmake. Or manually change the below.
+
+# Disabling warnings because we're getting external name length warnings
+# We should probably add some redefines instead
+
+# The command line is so long that it exceeds the limits of MSDOS
+# and we instead need to use the protected mode version of cl.exe
+
+# We define MSDOS for setjmp.h to compile, but it's not really
+# MSDOS nor OS/2 1.0. We do want 8086 though, although 80826
+# would work too, but not in the general case when we start
+# having apps to run on the 8086 too
+
+OMF=
+#OMF=-omf
+
+CFLAGS=-Oceglnt
+
+COPTS=-c -I. -I..\pdpclib -I..\src $(SZ4) -D__16BIT__ $(CFLAGS) -A$(MODELC) \
+    -Zl -Gs -nologo -Zp1 -DBUFSIZ=512 -Au -D__MSC__ -X -W0 -D__MSDOS__
+CC=cl
+AS=ml
+LD=link
+
+all: clean helper16.exe
+
+helper16.exe: helper16.obj hlp16st.obj
+  if exist msc.lib del msc.lib
+  lib msc /nologo ,
+  lib msc /nologo +helper16.obj,,
+  lib msc /nologo +hlp16st.obj,,
+# Stub for NE executable
+# No idea why the stub executable produced is so large
+  ml -c $(OMF) -DMSC -nologo -Dmemodel=tiny -DPDOS86 ..\src\needpdos.asm
+# Note that cparmaxalloc is documented as requiring a minimum of 1
+# exehdr -max:1 can accept a value of 0 if you don't mind inconsistency
+  link /cp:1 /noe /noi /nod /map /nologo /dosseg needpdos.obj,needpdos.exe,,,,
+# Not sure if there is a better way of doing this.
+  rm -f os2b.lib
+  echo LIBRARY DOSCALLS >tempb.def
+  echo EXPORTS >>tempb.def
+  echo __AHINCR @136 >>tempb.def
+  echo __AHSHIFT @135 >>tempb.def
+  implib /nologo os2b.lib tempb.def
+  echo STUB 'needpdos.exe' >tempc.def
+  link /pmtype:novio /noe /noi /nod /map /nologo /dosseg helper16.obj,helper16.exe,helper16.map,msc.lib+os2b.lib,tempc.def
+
+.c.obj:
+  $(CC) $(COPTS) $<
+
+.asm.obj:
+  ml -c $(OMF) -nologo -DMSC $(SZ4) -Dmemodel=$(MODELA) $<
+
+clean:
+  rm -f *.obj
+  rm -f helper16.exe
+  rm -f msc.lib
+  lib msc /nologo ,

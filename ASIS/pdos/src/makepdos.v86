@@ -1,0 +1,89 @@
+# Released to the public domain.
+#
+# Anyone and anything may copy, edit, publish,
+# use, compile, sell and distribute this work
+# and all its parts in any form for any purpose,
+# commercial and non-commercial, without any restrictions,
+# without complying with any conditions
+# and by any means.
+
+# This makefile builds pdos.exe for PDOS/86 on Windows,
+# using Visual Studio 1.52 plus exe2bin
+
+# makefile.msc should be run in PDPCLIB first
+# Or else makefile.m86 if using Microsoft C 6.0
+
+# Note that it is necessary to add the "noe" linker option
+# to stop the extended dictionary from being used and giving
+# errors about duplicates. Not sure if there is a better
+# way of doing that. Using a library reduces the number of
+# object files needed to be specified on the link command,
+# as we only need to specify the ones that are involved in
+# the self-loading process.
+
+VPATH=..\pdpclib
+
+# Read explanation in makefile.msc as to why you sometimes
+# need to use -omf
+OMF=
+#OMF=-omf
+
+# If using Microsoft C 6.0, need the version that
+# pollutes the namespace
+POLLUTE=-DPOLLUTE
+#POLLUTE=
+
+# This used to work, but for some reason it is now too long and
+# needs to be trimmed to just -O to avoid overflowing the
+# maximum command line length of some spawned program
+# Please retest that theory now that we know about -X
+#CFLAGS=-Ob1ceglnot
+CFLAGS=-O -X
+
+COPTS=-c -I. -I..\pdpclib -DBUFSIZ=512 -D__SZ4__ -D__MSDOS__ $(CFLAGS) -AH -Zl -Gs -nologo -Zp1
+CC=cl
+
+# This is huge memory model
+AS=masm -D@model=6 -D@codesize=1 -D@datasize=1 -Mx
+#AS=ml -nologo
+
+LINK=link
+#LINK=link /nologo
+LIB=lib
+#LIB=lib /nologo
+
+OBJS=\
+pdosstrt.obj \
+pdos.obj\
+bos.obj \
+support.obj \
+fat.obj \
+lldos.obj \
+handlers.obj \
+memmgr.obj \
+patmat.obj \
+process.obj \
+int21.obj \
+log.obj \
+helper.obj
+
+all: clean pdos.exe
+
+pdos.exe: $(OBJS)
+  rm -f pdos.tmp
+  $(LINK) /cp:1 /noe /noi /nod /map /dosseg pdosstrt.obj+pdos.obj,pdos.tmp,pdos.map,os.lib+..\pdpclib\msc.lib,,
+  exe2bin -base=20000 pdos.tmp pdos.exe
+
+.c.obj:
+  $(CC) $(COPTS) $<
+  $(LIB) os +$@,,
+
+.asm.obj:
+  $(AS) -c $(POLLUTE) -DMSC $(OMF) -Dmemodel=huge $< ,,,,
+  $(LIB) os +$@,,
+
+clean:
+  rm -f *.obj
+  rm -f pdos.exe
+  rm -f os.lib
+  $(LIB) os ,

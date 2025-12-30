@@ -1,0 +1,55 @@
+# Build an OS/2 LX executable for z/Windows
+
+# We can directly execute the __start routine
+
+CC=gccmvs
+AS=as370 -mhlasm -mebcdic
+LD=pdlde --oformat lx --no-insert-timestamp --emit-relocs -e __start
+
+CFLAGS=-Os -ansi
+COPTS=$(CFLAGS) -S -D__MF32__ \
+    -I . -DNOLIBALLOC -fno-common \
+    -D__NODECLSPEC__ -U__MVS__ -D__SHORTNAMES__ \
+    -D__OS2__ \
+    -I ../src -D__NOBIVA__ -I ../generic -D__32BIT__
+AR=xar
+
+CPP=pdcc -N -DSTD
+
+
+# We are unconditionally making this EBCDIC currently
+# I think gccmvs might do that unconditionally anyway
+# so I have removed it for now
+# ifeq "$(tgtchs)" "ebcdic"
+# COPTS:=$(COPTS) -funsigned-char
+# endif
+
+
+all: pdptest.exe
+
+pdptest.exe: pdptest.obj stdio.obj string.obj stdlib.obj \
+       start.obj time.obj errno.obj assert.obj signal.obj locale.obj \
+       ctype.obj setjmp.obj math.obj \
+       mfsupa.obj mfsupc.obj
+  rm -f pdpos2.lib
+  $(AR) r pdpos2.lib stdio.obj string.obj stdlib.obj
+  $(AR) r pdpos2.lib start.obj time.obj errno.obj assert.obj signal.obj
+  $(AR) r pdpos2.lib locale.obj ctype.obj setjmp.obj math.obj
+  $(AR) r pdpos2.lib mfsupa.obj mfsupc.obj
+  $(AR) s pdpos2.lib
+  genimp doscalls.wat os2.lib unknown
+  $(LD) -s -nostdlib -o pdptest.exe mfsupa.obj pdptest.obj setjmp.obj pdpos2.lib os2.lib
+
+.c.obj:
+  $(CC) $(COPTS) -o $*.s $<
+  $(AS) -o $*.obj $*.s
+  rm -f $*.s
+
+.asm.obj:
+  $(CPP) -o $*.s $<
+  $(AS) -mhlasm -mebcdic -o $@ $*.s
+  rm -f $*.s
+
+clean:
+  rm -f *.obj
+  rm -f pdptest.exe

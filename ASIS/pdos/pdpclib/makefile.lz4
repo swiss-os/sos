@@ -1,0 +1,34 @@
+# This is the makefile for 32-bit z/Linux to build pdpclib using
+# gccmvsa
+#
+
+CC=gccmvsa
+AS=as370 -mhlasm
+LD=pdld --oformat elf --output-e-machine EM_S390 --entry __crt0 --emit-relocs
+AR=xar
+CPP=pdcc -N -D ZLINUX
+
+COPTS=-Os -fno-builtin -nostdlib -nostdinc -I . \
+    -D__USEBIVA__ -fno-common -D__MF32__ -D__ZLINUX__ \
+    -I ../generic -I ../src -U__MVS__ -D__gnu_linux__
+
+
+pdptest.exe: linstart.o mfsupa.o pdptest.o stdio.o string.o stdlib.o \
+       start.o time.o errno.o assert.o signal.o locale.o \
+       ctype.o setjmp.o math.o __memmgr.o mfsupc.o
+	rm -f pdplinux.a
+	$(AR) r pdplinux.a linstart.o mfsupa.o stdio.o string.o stdlib.o
+	$(AR) r pdplinux.a start.o time.o errno.o assert.o signal.o
+	$(AR) r pdplinux.a locale.o ctype.o setjmp.o math.o __memmgr.o mfsupc.o
+        $(AR) s pdplinux.a
+	$(LD) -nostdlib -o pdptest pdptest.o pdplinux.a
+
+.c.o:
+	$(CC) -S -o $*.s $(COPTS) $<
+        $(AS) -o $@ $*.s
+        rm -f $*.s
+
+mfsupa.o: mfsupa.asm
+    $(CPP) -o $*.s $<
+    $(AS) -mhlasm -o $@ $*.s
+    rm -f $*.s

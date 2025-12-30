@@ -1,0 +1,27 @@
+# Produces win32 executable.
+# We link with the static library produced by makefile.p32
+# in order to make use of
+# PDPCLIB's ANSI escape sequence support
+
+CC=gccwin
+CFLAGS=-O2
+LD=pdld --no-insert-timestamp
+LDFLAGS=
+AS=pdas --oformat coff
+AR=xar
+COPTS=-S $(CFLAGS) -ansi -I . -I../pdpclib -I../src -D__WIN32__ -D__STATIC__ \
+  -D__NOBIVA__ -DNEED_AOUT -DNEED_MZ -DNEED_OS2 -D__32BIT__ -DNO_DLLENTRY \
+  -DGENSHELL
+
+all: clean bios.exe
+
+bios.exe: bios.obj list.obj ../bios/exeload.obj ../src/doscalls.obj
+    $(LD) $(LDFLAGS) -s -o bios.exe ../pdpclib/p32start.obj bios.obj list.obj ../bios/exeload.obj ../src/doscalls.obj ../pdpclib/pdpwin32.lib ../src/kernel32.lib
+
+.c.obj:
+    $(CC) $(COPTS) -I../bios -o $*.s $<
+    $(AS) -o $@ $*.s
+    rm -f $*.s
+
+clean:
+    rm -f *.obj bios.exe

@@ -1,0 +1,57 @@
+# Released to the public domain.
+#
+# Anyone and anything may copy, edit, publish,
+# use, compile, sell and distribute this work
+# and all its parts in any form for any purpose,
+# commercial and non-commercial, without any restrictions,
+# without complying with any conditions
+# and by any means.
+
+# This makefile builds 32-bit pdos.exe (aka PDOS.SYS) on Windows.
+# makefile.pdw in PDPCLIB must be used before using this makefile to produce the pdos.a.
+
+VPATH=../pfp/svga;../pdld/src/bytearray
+
+CC=gccwin
+CFLAGS=-O2 -ansi
+COPTS=$(CFLAGS) -S -fno-common -U__WIN32__ -DNOVM -DNEED_AOUT \
+      -D__HAVESYS__=_System -DNEED_OS2 -I../generic \
+      -DNEED_MZ -D__PDOS386__ -D__32BIT__ -I../bios -I../pdpclib \
+      -DW32DLL -D__EXPORT__ -DNOLIBALLOC -DNEED_ELF \
+      -I../pfp/svga -I../pdld/src/bytearray -I. \
+      -I../pdld/src
+AS=pdas
+AR=xar
+LD=pdld
+
+TARGET=pdos.exe
+TEMP_ARCHIVE=os.lib
+ARCHIVE_OBJS=bos.obj fat.obj ../bios/exeload.obj physmem.obj vmm.obj process.obj int21.obj uart.obj \
+             int80.obj log.obj helper.obj memmgr.obj patmat.obj supportf.obj protintp.obj protintf.obj pdosf.obj \
+             wingui.obj svga.obj vesa_bytearray.obj bytearray.obj kernel32.obj doscalls.obj
+OBJS=strt32.obj pdos.obj
+
+all: clean $(TARGET)
+
+$(TARGET): $(OBJS) $(TEMP_ARCHIVE)
+  $(AR) s $(TEMP_ARCHIVE)
+  $(LD) --oformat binary -Map map.txt --image-base 0x20000 -o $(TARGET) $(OBJS) $(TEMP_ARCHIVE) ../pdpclib/pdos.lib
+  rm -f $(TEMP_ARCHIVE)
+
+$(TEMP_ARCHIVE): $(ARCHIVE_OBJS)
+  rm -f $(TEMP_ARCHIVE)
+  $(AR) r $(TEMP_ARCHIVE) $(ARCHIVE_OBJS)
+
+.c.obj:
+  $(CC) $(COPTS) -o $*.s $<
+  $(AS) --oformat coff -o $@ $*.s
+  rm -f $*.s
+
+.asm.obj:
+  as86 -f coff -o $@ $<
+#  ml -c -nologo -coff $<
+
+clean:
+  rm -f *.obj
+  rm -f $(TARGET)
+  rm -f $(TEMP_ARCHIVE)

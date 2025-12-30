@@ -1,0 +1,29 @@
+# produce pdos.exe as an ARM a.out
+# You must have built pdpclib with makefile.arg first
+
+CC=gccarm
+CFLAGS=-O0 -D__UNOPT__ -fno-builtin -mapcs-32 -msoft-float
+LD=ldarm
+LDFLAGS=
+AS=asarm
+AR=ararm
+# Testing on an old ARM Samsung Chromebook showed that a delay
+# (NEED_DELAY) was able to overcome a coredump when PDOS
+# attempted to execute pcomm. Pinebook Pro had the same issue.
+# Seems that we need a cache flush
+COPTS=-S $(CFLAGS) -fno-common -mapcs-32 -ansi \
+   -I. -I../bios -I../pdpclib -I../src -DUSE_MEMMGR \
+   -D__PDOS386__ -D__ARMGEN__ -DNOLIBALLOC -DNEED_AOUT -DNEED_FLUSH
+
+all: clean pdos.exe
+
+pdos.exe: genstart.o pdos.o list.o ../bios/exeload.o ../src/fat.o ../src/patmat.o ../src/helper.o
+    $(LD) $(LDFLAGS) -s -N -e ___crt0 -o pdos.exe genstart.o pdos.o list.o ../bios/exeload.o ../src/fat.o ../src/patmat.o ../src/helper.o ../pdpclib/pdosgeno.a
+
+.c.o:
+    $(CC) $(COPTS) -o $*.s $<
+    $(AS) -o $@ $*.s
+    rm -f $*.s
+
+clean:
+    rm -f *.o pdos.exe

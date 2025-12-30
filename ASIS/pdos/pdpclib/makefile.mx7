@@ -1,0 +1,59 @@
+# This is the makefile for macOS to build pdpclib using
+# the mcc x64 compiler, pdas as the assembler, and pdld
+# as the linker
+
+# Note that x64 syscalls look like this:
+# mov rax, 0x2000001  (1 = exit)
+# syscall
+# with parameters in rdi, rsi, rdx, r10, r8, r9
+
+# But mcc uses the Win64 calling convention which
+# is rcx, rdx, r8, r9 and the rest are on the stack
+
+# We use 32-bit long so that the C library can be
+# exported to Win64 x64 programs that use msvcrt.dll
+
+
+CPP=pdcc -E
+CC=mcc
+#CC=mcc -long64
+
+COPTS=-D__MACOS__ \
+    -DXNEED_MPROTECT \
+    -DXUSE_MEMMGR \
+    -D__64BIT__ \
+    -I . \
+    -D__gnu_linux__ \
+    -D__NOBIVA__ \
+    -D__GENSHELL__
+
+
+AS=sasm -f win64
+GAS=pdas --64 --oformat coff
+
+AR=xar
+
+# pdld is using LC_MAIN, but the assembler entry
+# point can handle that and will take care of argc
+# and argv being in different registers from what mcc uses
+LD=pdld --oformat macho -e __pdpent
+
+pdptest: linstart.o mx7supa.o pdptest.o stdio.o string.o stdlib.o \
+       start.o time.o errno.o assert.o signal.o locale.o \
+       ctype.o math.o __memmgr.o setjmp.o
+	rm -f pdpmacos.a
+	$(AR) r pdpmacos.a linstart.o mx7supa.o stdio.o string.o stdlib.o
+	$(AR) r pdpmacos.a start.o time.o errno.o assert.o signal.o
+	$(AR) r pdpmacos.a locale.o ctype.o math.o __memmgr.o setjmp.o
+	$(AR) s pdpmacos.a
+	$(LD) -o pdptest linstart.o mx7supa.o pdptest.o pdpmacos.a
+
+.c.o:
+	$(CPP) $(COPTS) -o $*.i $<
+        $(CC) -o:$*.s $*.i
+        rm -f $*.i
+        $(GAS) -o $@ $*.s
+        rm -f $*.s
+
+mx7supa.o: mx7supa.asm
+	$(AS) -o $@ $*.asm

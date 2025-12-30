@@ -1,0 +1,55 @@
+# This is the makefile for Linux x64 ELF to build a pseudobios
+# using the gcc mingw-w64 compiler, and using the EBCDIC charset.
+
+# You need to build PDPCLIB with makefile.leb first
+
+# Under this pseudobios you can run makefile.leb (PDOS)
+# and makecomm.web (pcomm)
+
+# The EBCDIC define may need to be dropped.
+
+CC=gcc
+COPTS=-S -O2 -fno-builtin -D__64BIT__ -I . -m64 \
+    -mno-red-zone \
+    -fno-common -D__gnu_linux__ -fno-stack-protector \
+    -D__USEBIVA__ -nostdlib -nostdinc \
+    -U__WIN32__ --no-pie -fno-leading-underscore \
+    -I . \
+    -I../pdpclib -I../bios -I. -I../src -DNEED_ELF \
+    -DTARGET_64BIT -DNEED_MZ -DNO_DLLENTRY \
+    -D__GENSHELL__ -DGENSHELL \
+    -DW64EMUL -D__W64SHELL__ \
+    -DHAVE_DIR -DLINDIR -DEBCDIC -D__EBCDIC__
+
+# We will also need the charset conversion functions for
+# dealing with directory entries
+
+# Use EBCDIC
+COPTS:=$(COPTS) \
+    -funsigned-char \
+    -fexec-charset=IBM1047
+
+AR=xar
+
+AS=pdas --64 --oformat coff
+#AS=as --64
+
+LD=pdld --64 --oformat elf -nostdlib
+# --emit-relocs
+#LD=ld -static -nostdlib --emit-relocs
+# don't need to use gcc
+###LD=gcc -static -s -m64 -nostdlib -L,-emit-relocs
+
+# ld doesn't like -s and --emit-relocs at the same time,
+# so we need to use strip
+STRIP=strip --strip-unneeded
+
+OBJS=list.obj ../bios/exeload.obj ../src/patmat.obj
+
+bios.exe: bios.obj $(OBJS)
+    $(LD) -o bios.exe -e ___pdpstart ../pdpclib/linstart.o bios.obj $(OBJS) ../pdpclib/pdplinux.a
+
+.c.obj:
+	$(CC) $(COPTS) -o $*.s $<
+        $(AS) -o $@ $*.s
+        rm -f $*.s

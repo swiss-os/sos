@@ -1,0 +1,34 @@
+# produce pdos.exe as a win64 executable
+# You must have built pdpclib with makefile.c6o first
+
+# PDOS386 should be renamed to PDOSGENOS one day
+
+CC=cc64
+AS=sasm -f win64 -DCC64
+COPTS=-D__PDOS386__ \
+    -D__64BIT__ \
+    -D__NOBIVA__ -I . -I../pdpclib -I../src -I../bios -DNEED_MZ \
+    -DNO_DLLENTRY -Dconst= \
+    -DUSE_MEMMGR -DDONT_MM -DTARGET_64BIT \
+    -D__CC64__ -D__CC64OS__ -DWINNEWMOD
+
+OBJ=genstart.obj pdos.obj list.obj ../bios/exeload.obj \
+   ../pdpclib/__memmgr.obj ../src/fat.obj \
+   ../src/patmat.obj ../src/helper.obj
+
+all: clean pdos.exe
+
+pdos.exe: $(OBJ)
+  rm -f pdos.exe
+  pdld -e __crt0 -o pdos.exe $(OBJ) ../pdpclib/pdosgeno.lib
+
+.c.obj:
+  pdcc -E $(COPTS) -o $*.i $<
+  $(CC) -q -c -out:$@ $*.i
+  rm -f $*.i
+
+.asm.obj:
+  $(AS) -o $@ $<
+
+clean:
+  rm -f pdos.exe

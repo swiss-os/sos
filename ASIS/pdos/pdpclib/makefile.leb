@@ -1,0 +1,59 @@
+# This is the makefile for Linux x64 ELF to build pdpclib using
+# the gcc mingw-w64 compiler. So the calling convention is
+# different, and we need to compensate for that in the
+# assembler. And we compensate for EBCDIC running on ASCII
+# in the C code.
+
+# See comments in makefile.web about obtaining a suitable compiler.
+
+CC=gcc
+COPTS=-S -O2 -fno-builtin -D__64BIT__ -I . -m64 \
+    -mno-red-zone \
+    -fno-common -D__gnu_linux__ -fno-stack-protector \
+    -D__USEBIVA__ -D__NOSPECBIVA__ \
+    -nostdlib -nostdinc \
+    -U__WIN32__ --no-pie -fno-leading-underscore \
+    -D__GENSHELL__ \
+    -D__EBCDIC__
+
+# Use EBCDIC
+COPTS:=$(COPTS) -DCONV_CHARSET -DCONVFMAC=fasc \
+    -DCONVTMAC=tasc -funsigned-char \
+    -fexec-charset=IBM1047
+
+AR=xar
+
+AS=pdas --64 --oformat coff
+#AS=as --64
+
+LD=pdld --64 --oformat elf -nostdlib
+# --emit-relocs
+#LD=ld -static -nostdlib --emit-relocs
+# don't need to use gcc
+###LD=gcc -static -s -m64 -nostdlib -L,-emit-relocs
+
+# ld doesn't like -s and --emit-relocs at the same time,
+# so we need to use strip
+STRIP=strip --strip-unneeded
+
+pdptest: linstart.o l64supb.o pdptest.o stdio.o string.o stdlib.o \
+       start.o time.o errno.o assert.o signal.o locale.o \
+       ctype.o setjmp.o math.o __memmgr.o
+	rm -f pdplinux.a
+	$(AR) r pdplinux.a linstart.o l64supb.o stdio.o string.o stdlib.o
+	$(AR) r pdplinux.a start.o time.o errno.o assert.o signal.o
+	$(AR) r pdplinux.a locale.o ctype.o setjmp.o math.o __memmgr.o
+        $(AR) s pdplinux.a
+	$(LD) -o pdptest -e ___pdpstart l64supb.o linstart.o pdptest.o pdplinux.a
+#	$(STRIP) pdptest
+
+.c.o:
+	$(CC) $(COPTS) -o $*.s $<
+        $(AS) -o $@ $*.s
+        rm -f $*.s
+
+l64supb.o: l64supb.asm
+        pdas --64 --defsym LINUX=1 --oformat coff -o $@ $<
+#	as --64 --defsym LINUX=1 -o $@ $*.asm
+#	as -o $@ $*.asm
+#	as --64 --defsym STACKPARM=0 -o $@ $*.asm

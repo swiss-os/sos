@@ -1,0 +1,47 @@
+ifeq "$(crt)" "ucrt"
+CRTCOPTS=-D_UCRT
+CRTEXTRA=../pdpclib/ucrtwrap.lib ../pdpclib/ucrtbase.lib
+else
+CRTEXTRA=../pdpclib/msvcrt.lib
+endif
+
+CPP=pdcc
+
+ifeq "$(tools)" "mcc"
+CC=mcc
+CFLAGS=
+else
+CC=cc64
+CFLAGS=-D__CC64__
+endif
+
+LD=pdld
+LDFLAGS=-s -nostdlib --no-insert-timestamp --image-base 0x400000
+AS=pdas --oformat coff --64
+COPTS=-I. -I../pdpclib -D__WIN32__ -D__NOBIVA__ -D__64BIT__ $(CRTCOPTS)
+
+OBJS=append.obj ar.obj conv.obj delete.obj display.obj \
+    extract.obj lib.obj ranlib.obj replace.obj report.obj
+
+TARGET=xar.exe
+
+all: clean $(TARGET)
+
+$(TARGET): $(OBJS)
+  $(LD) $(LDFLAGS) -o $(TARGET) ../pdpclib/w32start.obj $(OBJS) $(CRTEXTRA)
+
+.c.obj:
+  $(CPP) -E $(COPTS) -o $*.i $<
+ifeq "$(tools)" "mcc"
+  $(CC) -o:$*.s $*.i
+else
+  $(CC) -c -out:$@ $*.i
+endif
+  rm -f $*.i
+ifeq "$(tools)" "mcc"
+  $(AS) -o $@ $*.s
+  rm -f $*.s
+endif
+
+clean:
+  rm -f $(OBJS) $(TARGET)

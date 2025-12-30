@@ -1,0 +1,30 @@
+# This is the makefile for 64-bit z/Linux to build pdpclib using
+# the gcc390 compiler.
+#
+
+CC=gcc390
+AS=as390 -m64 -mzarch -march=z900
+LD=pdld --64 --oformat elf --emit-relocs --entry __pdpent
+AR=xar
+
+COPTS=-O0 -fno-builtin -nostdlib -nostdinc -I . -m64 \
+    -D__USEBIVA__ -D__LONG64__ -D__64BIT__
+
+
+pdptest.exe: linstart.o lz9supa.o pdptest.o stdio.o string.o stdlib.o \
+       start.o time.o errno.o assert.o signal.o locale.o \
+       ctype.o setjmp.o math.o __memmgr.o
+	rm -f pdplinux.a
+	$(AR) r pdplinux.a linstart.o lz9supa.o stdio.o string.o stdlib.o
+	$(AR) r pdplinux.a start.o time.o errno.o assert.o signal.o
+	$(AR) r pdplinux.a locale.o ctype.o setjmp.o math.o __memmgr.o
+        $(AR) s pdplinux.a
+	$(LD) -nostdlib -o pdptest pdptest.o pdplinux.a
+
+.c.o:
+	$(CC) -S -o $*.s $(COPTS) $<
+        $(AS) -o $@ $*.s
+        rm -f $*.s
+
+lz9supa.o: lz9supa.asm
+	$(AS) -o $@ $*.asm

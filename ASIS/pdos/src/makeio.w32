@@ -1,0 +1,55 @@
+# Released to the public domain.
+#
+# Anyone and anything may copy, edit, publish,
+# use, compile, sell and distribute this work
+# and all its parts in any form for any purpose,
+# commercial and non-commercial, without any restrictions,
+# without complying with any conditions
+# and by any means.
+
+# This makefile builds pload.com for PDOS/386 on Windows,
+# using the Open Watcom toolchain.
+
+# To produce the 32-bit version, do this:
+# pdmake -f makeio.w32 TARG=PDOS32
+
+VPATH=..\pdpclib
+
+TARG=XPDOS32
+
+CC=wcl
+CFLAGS=-oneatx
+COPTS=-ecc -q -w -c -I. -I..\pdpclib -DNEWMODEL -mh -D__SZ4__ -zl -D__MSDOS__ -D$(TARG) -DNEED_DUMP -fpi87 -s -zdp -zu $(CFLAGS)
+AS=wasm
+LD=wlink
+
+# Adding this, and using pdld, will create an a.out
+# which could be post-processed into segmented binary
+#EXTRAOBJ=secend.obj
+
+OBJS=support.obj bos.obj dossupc.obj minifat.obj string.obj pdosload.obj \
+    lldos.obj protinta.obj file.obj protint.obj ctype.obj pload.obj \
+    ploadst.obj int13x.obj dossupa.obj $(EXTRAOBJ)
+
+all: clean pload.com
+
+pload.com: $(OBJS)
+  wlink File ploadst.obj,pload.obj,int13x.obj,dossupa.obj,dossupc.obj Name pload.com Form dos Output raw offset=0x700 Order clname CODE segment ploadst_TEXT offset=0x700 clname DATA clname BSS clname STACK Library watcom.lib Option quiet,map,verbose Disable 1080
+#  pdld -Map map.txt -o pload.com --oformat a.out --image-base 0x700 ploadst.obj pload.obj int13x.obj dossupa.obj dossupc.obj bos.obj watcom.lib $(EXTRAOBJ)
+
+.c.obj:
+  $(CC) $(COPTS) $<
+  wlib -b -q watcom +$@
+
+secend.obj: secend.asm
+  pdas -o $@ $<
+
+.asm.obj:
+# ml -c -omf -DNEWMODEL -nologo -Dmemodel=huge -DWATCOMC -DNEED_DISPLAYC $<
+  $(AS) -DNEWMODEL -zq -zcm -Dmemodel=huge -DWATCOM -DWATCOMC -DNEED_DISPLAYC $<
+  wlib -b -q watcom +$@
+
+clean:
+  rm -f *.obj
+  rm -f pload.com
+  rm -f watcom.lib

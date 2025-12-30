@@ -1,0 +1,41 @@
+# Produces Linux 64-bit ELF executable for ARM64
+# You should have built pdpclib with makefile.a64 first
+
+# And you can use tools=mingw64 if using mingw64
+
+# You can then use makecomm.a64 (for ELF executables)
+# or makecomm.pa6 (for PE executables)
+
+ifeq "$(tools)" "mingw64"
+CC=gcc -U__WIN32__
+else
+CC=gcc -D__LONG64__
+endif
+
+CFLAGS=-O2 -fno-builtin -D__gnu_linux__ \
+    -fno-stack-protector --no-pie -fno-common \
+    -D__USEBIVA__ -DNEED_ELF -DNEED_MACHO \
+    -DNO_DLLENTRY -DGENSHELL -D__ARM__ \
+    -DWINNEWMOD -DNOKERNEMUL -D__GENSHELL__ \
+    -D__64BIT__ -DHAVE_DIR -DLINDIR -DNEED_MZ -DTARGET_64BIT
+LD=pdld --oformat elf --emit-relocs
+#LD=gcc -static
+LDFLAGS=
+AS=as
+AR=ar
+COPTS=-S $(CFLAGS) -ansi -I../bios -I../pdpclib -I../src -I.
+
+OBJS=../bios/exeload.o list.o ../src/patmat.o
+
+all: clean bios
+
+bios: bios.o $(OBJS)
+  $(LD) $(LDFLAGS) -s -nostdlib -o bios.exe ../pdpclib/linstart.o bios.o $(OBJS) ../pdpclib/pdplinux.a
+
+.c.o:
+    $(CC) $(COPTS) -I../bios -o $*.s $<
+    $(AS) -o $@ $*.s
+    rm -f $*.s
+
+clean:
+	rm -f *.o bios

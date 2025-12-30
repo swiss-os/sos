@@ -1,0 +1,31 @@
+# Produces Linux 64-bit ELF executable for LoongArch64
+# You should have built pdpclib with makefile.lg6 first
+
+
+CC=gcc
+CFLAGS=-O2 -fno-builtin -D__gnu_linux__ \
+    -fno-stack-protector --no-pie -fno-common \
+    -D__USEBIVA__ -DNEED_ELF \
+    -DNO_DLLENTRY -DGENSHELL -D__LOONG__ -D__LONG64__ \
+    -D__64BIT__ -DHAVE_DIR -DLINDIR -DNEED_MZ -DTARGET_64BIT \
+    -mdirect-extern-access -DWINNEWMOD -D__NOSTDCALL__ \
+    -D__NODECLSPEC__ -D__GENSHELL__
+LD=pdld --oformat elf --emit-relocs
+#LD=gcc -static -L,--emit-relocs
+LDFLAGS=
+AS=as
+AR=ar
+COPTS=-S $(CFLAGS) -ansi -I../bios -I../pdpclib -I../src -I.
+
+all: clean bios
+
+bios: bios.o list.o ../src/patmat.o ../bios/exeload.o
+  $(LD) $(LDFLAGS) -s -nostdlib -o bios.exe ../pdpclib/linstart.o bios.o list.o ../src/patmat.o ../bios/exeload.o ../pdpclib/pdplinux.a
+
+.c.o:
+    $(CC) $(COPTS) -I../bios -o $*.s $<
+    $(AS) -o $@ $*.s
+    rm -f $*.s
+
+clean:
+	rm -f *.o bios

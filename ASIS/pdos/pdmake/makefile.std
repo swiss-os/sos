@@ -1,0 +1,110 @@
+# Produce Windows executables
+# links with PDPCLIB created by makefile.std
+# Or makefile.war if using the ARM versions of the tools
+
+VPATH=./hashtab
+
+ifeq "$(crt)" "ucrt"
+CRTCOPTS=-D_UCRT -D_USE_32BIT_TIME_T
+CRTEXTRA=../pdpclib/ucrtwrap.lib ../pdpclib/ucrtbase.lib
+else
+CRTEXTRA=../pdpclib/msvcrt.lib
+endif
+
+ifeq "$(targ)" "arm"
+CC=gccprm
+CFLAGS=-O0
+AS=asprm
+AR=arprm
+LD=pdld
+LDFLAGS=-s --no-insert-timestamp -nostdlib
+COPTS=-S $(CFLAGS) -fno-common -ansi -I. -I./hashtab -I../pdpclib \
+    -D__WIN32__ -D__ARM__ -msoft-float -mapcs-32 -fno-leading-underscore \
+    -D__USEBIVA__ -DNOFLOAT $(CRTCOPTS)
+EXTRA=../pdpclib/armsupa.obj ../pdpclib/fpfuncsa.obj $(CRTEXTRA)
+EXTRA2=../pdpclib/w32start.obj
+
+
+else ifeq "$(targ)" "macarm"
+# makefile.m64 needs to have been run in pdpclib first
+# with tools=mac
+CC=clang -S -O2 -D__ARM__ -fno-builtin -D__MACOS__ \
+    -D__64BIT__ -fno-stack-protector -D__USEBIVA__ \
+    -Wno-error=implicit-function-declaration \
+    -mmacosx-version-min=10 \
+    -D__LONG64__ \
+    -I. -I./hashtab -I../pdpclib
+AR=ar
+AS=as -mmacosx-version-min=10
+LD=clang -Wl,-e, -Wl,___pdpent -mmacosx-version-min=10
+EXTRA2=../pdpclib/pdpmacos.a
+
+
+else ifeq "$(targ)" "gccarm64"
+# makefile.a64 needs to have been run in pdpclib first
+CC=gcc -S -O2 -D__ARM__ -nostdinc -nostdlib -fno-builtin \
+   -D__64BIT__ -fno-stack-protector --no-pie -D__USEBIVA__ \
+   -D__LONG64__ \
+   -I. -I./hashtab -I../pdpclib
+AR=ar
+AS=as
+# -m64 isn't always recognized
+LD=gcc -static -s -nostdlib -e __pdpent
+EXTRA2=../pdpclib/linstart.o
+EXTRA=../pdpclib/pdplinux.a
+
+
+else ifeq "$(targ)" "gccamd64"
+# makefile.l64 needs to have been run in pdpclib first
+CC=gcc -S -O2 -D__gnu_linux__ -nostdinc -nostdlib -fno-builtin \
+    -D__64BIT__ -fno-stack-protector --no-pie -D__USEBIVA__ \
+    -m64 -fno-common -D__LONG64__ \
+    -I. -I./hashtab -I../pdpclib
+AR=ar
+AS=as
+LD=gcc -s -static -m64 -nostdlib -Wl,-e -Wl,__pdpent
+LDFLAGS=
+EXTRA2=../pdpclib/linstart.o
+EXTRA=../pdpclib/pdplinux.a
+
+
+else ifeq "$(targ)" "zpg"
+# You need to have run makefile.zpg first
+CC=gccmvs
+CFLAGS=-O2
+AS=as370 -mhlasm -mebcdic
+AR=xar
+LD=pdld
+LDFLAGS=-s --no-insert-timestamp -nostdlib
+COPTS=-S $(CFLAGS) -fno-common -ansi -I. -I./hashtab -I../pdpclib \
+    -I../generic -I../src -DNOFLOAT -U__MVS__ -D__MF32__ -D__PDOSGEN__ \
+    -D__NOBIVA__
+EXTRA2=--oformat mvs -e __crt0 ../pdpclib/pgastart.o
+
+else
+CC=gccwin
+CFLAGS=-O2
+AS=pdas --oformat coff
+AR=xar
+LD=pdld
+LDFLAGS=-s --no-insert-timestamp -nostdlib
+COPTS=-S $(CFLAGS) -fno-common -ansi -I. -I./hashtab -I../pdpclib -D__WIN32__ $(CRTCOPTS)
+EXTRA2=../pdpclib/w32start.obj
+EXTRA=$(CRTEXTRA)
+
+endif
+
+
+
+all: clean pdmake.exe
+
+pdmake.exe: main.obj read.obj rule.obj variable.obj xmalloc.obj hashtab.obj
+  $(LD) $(LDFLAGS) -o pdmake.exe $(EXTRA2) main.obj read.obj rule.obj variable.obj xmalloc.obj hashtab.obj $(EXTRA)
+
+.c.obj:
+  $(CC) $(COPTS) -o $*.s $<
+  $(AS) -o $@ $*.s
+  rm -f $*.s
+
+clean:
+  rm -f *.obj pdmake.exe

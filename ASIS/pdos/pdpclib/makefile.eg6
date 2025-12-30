@@ -1,0 +1,53 @@
+# This is the makefile for Linux to build pdpclib using
+# the gcc compiler for 64-bit LoongArch64 EFI.
+#
+# The result can be tested with qemu like this:
+#
+# qemu-system-loongarch64 ^
+#  -monitor none ^
+#  -bios edk2-loongarch64-code.fd ^
+#  -drive file=fat:rw:loong64,format=raw
+#
+# There is quite a lot of verbiage when it starts
+#
+# You can automatically boot by naming the file:
+#
+# loong64\EFI\BOOT\BOOTLOONGARCH64.EFI
+
+
+CC=gcc
+COPTS=-c -O2 -D__LOONG__ -nostdinc -nostdlib -fno-builtin \
+    -D__64BIT__ -I . -fno-stack-protector --no-pie -D__USEBIVA__ \
+    -D__NOSPECBIVA__ -D__LONG64__ -mdirect-extern-access \
+    -D__EFI__ -D__EFIBIOS__ -U__gnu_linux__ \
+    -DWINNEWMOD -D__GENSHELL__
+AS=as
+AR=ar
+
+# Can't combine -s and --emit-relocs with ld for some reason
+STRIP=strip --strip-unneeded
+
+# No need to use gcc to link anymore
+####LD=gcc -nostdlib -static -e __pdpent -L,--emit-relocs
+#LD=ld -nostdlib -static -e __pdpent --emit-relocs
+
+LD=pdld --oformat coff -e efimain -s --emit-relocs \
+  --subsystem 10
+
+
+pdptest.efi: efistart.o lg6supa.o pdptest.o stdio.o string.o stdlib.o \
+       start.o time.o errno.o assert.o signal.o locale.o \
+       ctype.o math.o __memmgr.o
+	rm -f pdpefi.lib
+	$(AR) r pdpefi.lib efistart.o lg6supa.o stdio.o string.o stdlib.o
+	$(AR) r pdpefi.lib start.o time.o errno.o assert.o signal.o
+	$(AR) r pdpefi.lib locale.o ctype.o math.o __memmgr.o
+        $(AR) s pdpefi.lib
+	$(LD) -nostdlib -o pdptest.efi efistart.o lg6supa.o pdptest.o pdpefi.lib
+#	$(STRIP) pdptest
+
+.c.o:
+	$(CC) $(COPTS) $<
+
+lg6supa.o: lg6supa.asm
+	$(AS) --defsym LINUX=0 --defsym ELF=0 -o $@ $*.asm

@@ -1,0 +1,63 @@
+# This is the makefile for Linux x64 to build kernel32 using
+# the gcc mingw-w64 compiler to produce an EBCDIC
+# Win64 x64 PE/COFF library and DLL.
+
+# You need to use an EBCDIC version of pdld - called
+# pdlde here
+
+VPATH=../pdpclib
+
+CC=gcc
+# Needed by compiler:
+COPTS=-S -O2 -fno-builtin -I . -m64 \
+    -mno-red-zone \
+    -fno-common -U__gnu_linux__ -fno-stack-protector \
+    -D__USEBIVA__ -nostdlib -nostdinc \
+    --no-pie -fno-leading-underscore \
+    -D__EBCDIC__
+
+# Needed by app:
+COPTS:=$(COPTS) -D__WIN32__ -D__STATIC__ -I ../pdpclib \
+ -I . -DNOLIBALLOC -D__64BIT__
+
+# Use EBCDIC
+COPTS:=$(COPTS) -funsigned-char \
+    -fexec-charset=IBM1047
+
+AR=xar
+
+AS=pdas --64 --oformat coff
+#AS=as --64
+
+LD=pdlde --implib-compat --64 --oformat coff -nostdlib --emit-relocs
+
+EXPORT_OBJS=dllcrt.obj kernel32.obj
+OBJS=pdossupc.obj pos.obj string.obj supportc.obj
+
+all: clean kernel32.dll
+
+kernel32.dll: $(EXPORT_OBJS) $(OBJS)
+  $(LD) --no-insert-timestamp --image-base 0x400000 -s -o kernel32.dll --shared --kill-at --out-implib kernel32.lib $(EXPORT_OBJS) $(OBJS)
+
+
+dllcrt.obj: ../pdpclib/dllcrt.c
+    $(CC) $(COPTS) -D__EXPORT__ -o $*.s $<
+    $(AS) -o $@ $*.s
+    rm -f $*.s
+
+kernel32.obj: kernel32.c
+    $(CC) $(COPTS) -D__EXPORT__ -o $*.s $<
+    $(AS) -o $@ $*.s
+    rm -f $*.s
+
+.c.obj:
+	$(CC) $(COPTS) -o $*.s $<
+        $(AS) -o $@ $*.s
+        rm -f $*.s
+
+x64supa.obj: x64supa.asm
+  pdas --oformat coff --defsym PDAS=1 --no-pseudo-dot --64 -o $@ $<
+
+clean:
+    rm -f kernel32.lib
+    rm -f kernel32.dll

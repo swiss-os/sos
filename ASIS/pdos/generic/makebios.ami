@@ -1,0 +1,24 @@
+# Produces Amiga hunk executable for Amiga 68000
+# Links against C library produced by makefile.ami
+
+CC=gccami
+CFLAGS=-O2
+LD=pdld --oformat amiga
+LDFLAGS=
+AS=asami
+AR=xar
+COPTS=-S $(CFLAGS) -m68000 -ansi -I../pdpclib -I../src -D__AMIGA__ \
+    -D__NOBIVA__ -DNEED_AMIGA -fno-common
+
+all: clean bios.exe
+
+bios.exe: bios.o ../bios/exeload.o
+    $(LD) $(LDFLAGS) -s -o bios.exe ../pdpclib/amistart.o bios.o ../bios/exeload.o ../pdpclib/amiga.a
+
+.c.o:
+    $(CC) $(COPTS) -I../bios -o $*.s $<
+    $(AS) -o $@ $*.s
+    rm -f $*.s
+
+clean:
+    rm -f *.o bios.exe

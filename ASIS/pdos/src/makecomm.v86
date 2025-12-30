@@ -1,0 +1,67 @@
+# Released to the public domain.
+#
+# Anyone and anything may copy, edit, publish,
+# use, compile, sell and distribute this work
+# and all its parts in any form for any purpose,
+# commercial and non-commercial, without any restrictions,
+# without complying with any conditions
+# and by any means.
+
+# This makefile builds pcomm.exe for PDOS/86 on Windows
+
+# makefile.msc should be run in PDPCLIB first
+
+# Note that it is necessary to add the "noe" linker option
+# to stop the extended dictionary from being used and giving
+# errors about duplicates. Not sure if there is a better
+# way of doing that. Using a library reduces the number of
+# object files needed to be specified on the link command,
+# as we only need to specify the ones that are involved in
+# the self-loading process.
+
+# Note that I had to change /nologo to just /nol to get
+# under the approx 127 character limit on program execution
+# when running an MSDOS version of link.exe
+
+# See explanation in makefile.msc as to why you sometimes
+# need to assemble with -omf
+OMF=
+#OMF=-omf
+
+# I thought this used to work, but I am now getting errors
+# due to spawned command being too long it seems, so it
+# needs to be trimmed to just -O
+# Try using -X
+
+#CFLAGS=-Ob1ceglnot
+CFLAGS=-O -X
+
+COPTS=-c -I. -I..\pdpclib -DBUFSIZ=512 -D__SZ4__ -D__MSDOS__ $(CFLAGS) -AH -Zl -Gs -nologo -Zp1
+CC=cl
+
+# This is huge
+AS=masm -D@model=6 -D@codesize=1 -D@datasize=1 -Mx
+#AS=ml -nologo
+LINK=link
+#LINK=link /nol
+
+OBJS=\
+pcomm.obj \
+pos.obj \
+dostime.obj \
+support.obj
+
+all: clean pcomm.exe
+
+pcomm.exe: $(OBJS)
+  $(LINK) /cp:1 /noe /noi /nod /map /dosseg pcomm.obj+pos.obj+dostime.obj+support.obj,pcomm.exe,pcomm.map,..\pdpclib\msc.lib,,
+
+.c.obj:
+  $(CC) $(COPTS) $<
+
+.asm.obj:
+  $(AS) -c -DMSC $(OMF) -Dmemodel=huge $< ,,,,
+
+clean:
+  rm -f *.obj
+  rm -f pcomm.exe

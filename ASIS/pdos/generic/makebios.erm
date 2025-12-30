@@ -1,0 +1,36 @@
+# This builds ELF ARM executables
+# You must have built PDPCLIB with makefile.erm first
+
+# Executing on a Pinebook Pro needs a delay
+# Same experience on a Samsung Chromebook
+# Seems we actually need a flush
+
+# Both gccerm and gccprm should use register parameters
+# and work, but only gccprm is known to work currently
+
+CC=gccprm
+CFLAGS=-O0 -fno-common -mapcs-32
+#LD=lderm
+LD=pdld --oformat elf
+LDFLAGS=-e __start
+AS=asprm
+AR=arprm
+COPTS=-S $(CFLAGS) -ansi -I . -I../pdpclib -I../bios -I../src \
+  -D__ARM__ -fno-common -mapcs-32 -DNEED_FLUSH \
+  -DGENSHELL -DHAVE_DIR -DLINDIR -D__gnu_linux__ -msoft-float \
+  -fno-leading-underscore -DNEED_MZ \
+  -DWINNEWMOD -DNOKERNEMUL \
+  -D__GENSHELL__ -DNO_DLLENTRY -DNEED_ELF -DNEED_AOUT
+
+all: clean bios.exe
+
+bios.exe: bios.o list.o ../src/patmat.o ../bios/exeload.o
+    $(LD) $(LDFLAGS) -s --emit-relocs -o bios.exe ../pdpclib/linstart.o bios.o list.o ../src/patmat.o ../bios/exeload.o ../pdpclib/pdperm.a
+
+.c.o:
+    $(CC) $(COPTS) -o $*.s $<
+    $(AS) -o $@ $*.s
+    rm -f $*.s
+
+clean:
+    rm -f *.o bios.exe

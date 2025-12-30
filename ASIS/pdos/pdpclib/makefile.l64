@@ -1,0 +1,36 @@
+# This is the makefile for Linux x64 ELF to build pdpclib using
+# the gcc compiler.
+
+# Because we don't use the parameters passed by Linux, we
+# are getting away with not having a proper entry point
+# suitable for the environment. We should fix this.
+
+CC=gcc
+COPTS=-c -O2 -fno-builtin -D__64BIT__ -I . -m64 \
+    -fno-common -D__gnu_linux__ -fno-stack-protector \
+    -D__USEBIVA__ -D__LONG64__ -nostdlib -nostdinc
+
+LD=ld -e __pdpent -static -nostdlib --emit-relocs
+# don't need to use gcc
+###LD=gcc -static -s -m64 -nostdlib -L,-emit-relocs
+
+# ld doesn't like -s and --emit-relocs at the same time,
+# so we need to use strip
+STRIP=strip --strip-unneeded
+
+pdptest: linstart.o l64supa.o pdptest.o stdio.o string.o stdlib.o \
+       start.o time.o errno.o assert.o signal.o locale.o \
+       ctype.o setjmp.o math.o __memmgr.o
+	rm -f pdplinux.a
+	ar r pdplinux.a linstart.o l64supa.o stdio.o string.o stdlib.o
+	ar r pdplinux.a start.o time.o errno.o assert.o signal.o
+	ar r pdplinux.a locale.o ctype.o setjmp.o math.o __memmgr.o
+	$(LD) -o pdptest linstart.o l64supa.o pdptest.o pdplinux.a
+	$(STRIP) pdptest
+
+.c.o:
+	$(CC) $(COPTS) $<
+
+l64supa.o: l64supa.asm
+	as -o $@ $*.asm
+#	as --64 --defsym STACKPARM=0 -o $@ $*.asm

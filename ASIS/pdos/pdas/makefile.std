@@ -1,0 +1,164 @@
+# Released to the public domain.
+#
+# Anyone and anything may copy, edit, publish,
+# use, compile, sell and distribute this work
+# and all its parts in any form for any purpose,
+# commercial and non-commercial, without any restrictions,
+# without complying with any conditions
+# and by any means.
+
+# Uses some headers and code from PDLD to avoid duplicating code.
+VPATH=src;src/hashtab;../pdld/src;../pdld/src/bytearray
+CINCLUDE=-I. -I./src -I./src/hashtab -I../pdld/src -I../pdld/src/bytearray -I../pdpclib
+
+ifeq "$(crt)" "ucrt"
+CRTCOPTS=-D_UCRT -D_USE_32BIT_TIME_T
+CRTEXTRA=../pdpclib/ucrtwrap.lib ../pdpclib/ucrtbase.lib
+else
+CRTEXTRA=../pdpclib/msvcrt.lib
+endif
+
+ifeq "$(targ)" "zpg"
+# Produces z/PDOS-generic executable.
+# Links with PDPCLIB created by makefile.zpg
+CC=gccmvs
+PREPROCESSOR=pdcc -E
+CFLAGS=-Os
+AS=as370 -mhlasm -mebcdic
+AR=xar
+LD=pdld
+LDFLAGS=-s --no-insert-timestamp
+# If targeting ASCII, get rid of the CONV*MAC defines
+# (the current = is important)
+# At time of writing, gen.exe needs to be gen and
+# copied to \dos and the process repeated, too
+COPTS=-S $(CFLAGS) -fno-common -ansi \
+    $(CINCLUDE) \
+    -I../generic -I../src \
+    -U__MVS__ -D__MF32__ -D__PDOSGEN__ -D__NOBIVA__ \
+    -DNO_LONG_LONG -DSHORT_NAMES \
+    -DCONV_CHARSET -DCONVTMAC= -DCONVFMAC=
+EXTRA1=--oformat mvs ../pdpclib/pgastart.o
+
+
+else ifeq "$(targ)" "macarm"
+# makefile.m64 needs to have been run in pdpclib first
+# with tools=mac altld=pdld
+CC=clang -S -O2 -D__ARM__ -fno-builtin -D__MACOS__ \
+    -D__64BIT__ -fno-stack-protector -D__USEBIVA__ \
+    -Wno-error=implicit-function-declaration \
+    -mmacosx-version-min=10 \
+    -D__LONG64__ -DNO_LONG_LONG \
+    $(CINCLUDE) \
+    -I../generic -I../src
+PREPROCESSOR=pdcc -E
+AR=ar
+AS=as -mmacosx-version-min=10
+LD=clang -Wl,-e, -Wl,___pdpent -mmacosx-version-min=10
+EXTRA2=../pdpclib/pdpmacos.a
+
+
+else ifeq "$(targ)" "macamd64"
+# makefile.mx6 needs to have been run in pdpclib first
+CC=clang -arch x86_64 -mmacosx-version-min=11 \
+    -S -O2 -fno-builtin -D__MACOS__ \
+    -D__64BIT__ -D__LONG64__ \
+    -fno-stack-protector  -D__gnu_linux__  -D__USEBIVA__ \
+    -nostdinc \
+    -DNO_LONG_LONG \
+    $(CINCLUDE) \
+    -I../generic -I../src
+PREPROCESSOR=pdcc -E
+AR=ar
+AS=as -arch x86_64 -mmacosx-version-min=11
+LD=clang -arch x86_64 -Wl,-no_uuid -Wl,-no_adhoc_codesign \
+    -Wl,-e, -Wl,__start \
+    -mmacosx-version-min=11
+EXTRA2=../pdpclib/pdpmacos.a
+
+
+else ifeq "$(targ)" "gccarm64"
+# makefile.a64 needs to have been run in pdpclib first
+CC=gcc -S -O2 -D__ARM__ -nostdinc -nostdlib -fno-builtin \
+    -D__64BIT__ -fno-stack-protector --no-pie -D__USEBIVA__ \
+    -D__LONG64__ -DNO_LONG_LONG \
+    $(CINCLUDE) \
+    -I../generic -I../src
+PREPROCESSOR=pdcc -E
+AR=ar
+AS=as
+# -m64 isn't always recognized
+LD=gcc -static -s -nostdlib
+EXTRA1=../pdpclib/linstart.o
+EXTRA2=../pdpclib/pdplinux.a
+
+
+else ifeq "$(targ)" "gccamd64"
+# makefile.l64 needs to have been run in pdpclib first
+CC=gcc -S -O2 -D__gnu_linux__ -nostdinc -nostdlib -fno-builtin \
+    -D__64BIT__ -fno-stack-protector --no-pie -D__USEBIVA__ \
+    -m64 -fno-common -D__LONG64__ -DNO_LONG_LONG \
+    $(CINCLUDE) \
+    -I../generic -I../src
+PREPROCESSOR=pdcc -E
+AR=ar
+AS=as
+LD=gcc -s -static -m64 -nostdlib -Wl,-e -Wl,__pdpent
+EXTRA1=../pdpclib/linstart.o
+EXTRA2=../pdpclib/pdplinux.a
+
+
+
+else
+CC=gccwin
+PREPROCESSOR=pdcc -E
+CFLAGS=-O2
+#CFLAGS=-O2 -DNO_LONG_LONG -ansi -pedantic-errors
+LD=pdld
+LDFLAGS=--no-insert-timestamp -s
+AS=pdas --oformat coff
+COPTS=-S $(CFLAGS) -Wall -fno-common $(CINCLUDE) \
+    -D__WIN32__ -D__NOBIVA__ $(CRTCOPTS)
+EXTRA1=../pdpclib/w32start.obj
+EXTRA2=$(CRTEXTRA)
+endif
+
+
+OBJS=a_out.obj as.obj bytearray.obj cfi.obj coff.obj cond.obj cstr.obj elf.obj error.obj \
+expr.obj frags.obj hashtab.obj libas.obj listing.obj load_line.obj process.obj sections.obj symbols.obj write.obj int64sup.obj \
+i386_as.obj elf_bytearray.obj
+
+ifeq "$(targ)" "zpg"
+VPATH:=$(VPATH);src/ftasc
+OBJS:=$(OBJS) fasc.obj tasc.obj
+COPTS:=$(COPTS) -I./src/ftasc
+endif
+
+TARGET=pdas.exe
+
+all: clean generate $(TARGET)
+
+$(TARGET): $(OBJS)
+  $(LD) $(LDFLAGS) -o $(TARGET) $(EXTRA1) $(OBJS) $(EXTRA2)
+
+.c.obj:
+  $(CC) $(COPTS) -o $*.s $<
+  $(AS) -o $@ $*.s
+  rm -f $*.s
+
+clean: clean_generate
+  rm -f $(OBJS) $(TARGET)
+
+OBJS_GENERATE=i386_gen.obj i386_opc.i
+
+generate: clean_generate $(OBJS_GENERATE)
+  $(LD) $(LDFLAGS) -o gen.exe $(EXTRA1) i386_gen.obj $(EXTRA2)
+#  copy wingen.exe gen.exe
+  gen.exe i386_opc.i i386_tbl.h
+
+clean_generate:
+  rm -f $(OBJS_GENERATE) gen.exe i386_tbl.h
+
+.tbl.i:
+  $(PREPROCESSOR) $(COPTS) -o $@ $<
+

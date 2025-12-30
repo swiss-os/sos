@@ -1,0 +1,76 @@
+# This is the makefile for Linux x64 to build PDOS-generic
+# using the gcc mingw-w64 compiler, and using the EBCDIC charset.
+
+# You need to have build PDPCLIB with makefile.leo first
+
+# You can use makebios.leb as the pseudobios and
+# makecomm.web as the command processor, and run
+# Win64 x64 EBCDIC applications built with
+# pdpclib makefile.web
+
+# And you will need a special pdld that produces EBCDIC files.
+# It is called pdlde here
+
+# We really need to start splitting these defines between:
+# 1. What the compiler needs
+# 2. What the environment needs
+# 3. What the application needs
+# (assuming the above is technically correct - not sure
+# if number 2 is distinct)
+
+# With -O2 in place, adding a printf to debug issues
+# can cause a radical rearrangement of the code, so I
+# cannot reasonably debug that issue. I'm certainly not
+# willing to work on someone else's copyrighted product
+# for free, anyway. So I'm dropping to -O1 instead. I'm
+# more willing to fix issues that may arise once the
+# public domain mcc is working on EBCDIC.
+
+CC=gcc
+COPTS=-S -O1 -fno-builtin -D__64BIT__ -I . -m64 \
+    -fno-common -U__gnu_linux__ -fno-stack-protector \
+    -mno-red-zone \
+    -D__USEBIVA__ -nostdlib -nostdinc \
+    -U__WIN32__ --no-pie -fno-leading-underscore \
+    -I . \
+    -I../pdpclib -I../bios -I. -I../src -DNEED_ELF \
+    -DTARGET_64BIT -DNEED_MZ -DNO_DLLENTRY \
+    -DEBCDIC -DUSE_MEMMGR -DDONT_MM \
+    -DWINNEWMOD -D__EXPORT__ -D__HALFEXP__ \
+    -DNOLIBALLOC -D__GENSHELL__ \
+    -D__EBCDIC__
+
+# We will also need the charset conversion functions for
+# dealing with directory entries
+
+# Use EBCDIC
+COPTS:=$(COPTS) \
+    -funsigned-char \
+    -fexec-charset=IBM1047
+
+AR=xar
+
+AS=pdas --64 --oformat coff
+#AS=as --64
+
+LD=pdlde --64 --oformat coff -nostdlib --emit-relocs
+#LD=ld -static -nostdlib --emit-relocs
+# don't need to use gcc
+###LD=gcc -static -s -m64 -nostdlib -L,-emit-relocs
+
+# ld doesn't like -s and --emit-relocs at the same time,
+# so we need to use strip
+STRIP=strip --strip-unneeded
+
+OBJS=genstart.obj pdos.obj list.obj ../bios/exeload.obj \
+   ../pdpclib/__memmgr.obj ../src/fat.obj \
+   ../src/kernel32.obj \
+   ../src/patmat.obj ../src/helper.obj
+
+pdos.exe: pdos.obj $(OBJS)
+    $(LD) -o pdos.exe -e __crt0 $(OBJS) ../pdpclib/pdosgeno.a
+
+.c.obj:
+	$(CC) $(COPTS) -o $*.s $<
+        $(AS) -o $@ $*.s
+        rm -f $*.s

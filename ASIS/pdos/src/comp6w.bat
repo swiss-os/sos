@@ -1,0 +1,1 @@
+pdmake -f makecomm.std

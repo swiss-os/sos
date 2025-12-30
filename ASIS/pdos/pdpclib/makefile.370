@@ -1,0 +1,149 @@
+# This builds PDPCLIB for CMS or MVS or MTS using binutils
+
+# Need to disable builtins because an ASCII/EBCDIC issue
+# means that it thinks there is no '%' and can use an fputs
+
+# There is no need to copy pdp370.mac to pdptop.mac
+# before running this makefile, as this only compiles
+# C code, and the assembler macros are not used.
+
+
+# for MVS ...
+# mvsstart.obj and mvssupa.obj need to be provided separately
+# and can be built with mvsasm as seen in pdpmvs4.bat
+
+# for CMS ...
+# cmsstart.obj and cmssupa.obj need to be provided separately
+# after building on CMS using pdpcms.bat
+# (and this will be F80 object code/text)
+
+# for MTS ...
+# mtsstart.o and mtssupa.o need to be provided separately
+# after build on MTS using pdpmts.bat or pdpmts.sh
+# (and you will need to modify pdpmts.m4 and copy the files
+# off one at a time and copy them from hercout.dat).
+# To test you will need to copy pdptest.exe to replace
+# Tapes/hercauto.dat and run pdpmts again.
+# runmts isn't as sophisticated as the MVS version yet
+
+# For VSE ...
+# vsestart.obj and vsesupa.obj need to be provided separately
+# You can modify pdpvse.bat and pdpvse.m4 to extract the
+# requisite object code one at a time.
+# And execvse.bat in util/vsesimp has a method to run an executable
+# However - it currently doesn't work because of a dependency on
+# routines documented in vsesupa.asm (search for IJJFCIZD)
+# I tried this (noting that we should update vsegetr to punch to
+# a disk file first so that the first card isn't punched, and
+# then copy it to tape so that runvse can handle it, and also so
+# that we don't need to remove the "ascii" from the punch
+# definition in vse380.conf, and until then, add some echo
+# statements to vsegetr.bat explaining the situation!):
+# rem call vsegetr IJJFCIZD IJJFCIZD.obj
+# rem copy \vse380\run\io\punch.txt IJJFCIZD.obj
+# rem call vsegetr IJJFCBZD IJJFCBZD.obj
+# rem copy \vse380\run\io\punch.txt IJJFCBZD.obj
+# rem call vsegetr IJGUIZZZ IJGUIZZZ.obj
+# rem copy \vse380\run\io\punch.txt IJGUIZZZ.obj
+# rem call vsegetr IJGUOZZZ IJGUOZZZ.obj
+# rem copy \vse380\run\io\punch.txt IJGUOZZZ.obj
+# xychop ..\IJJFCIZD.obj IJJFCIZD.obj 80 99999
+# xychop ..\IJJFCBZD.obj IJJFCBZD.obj 80 99999
+# xychop ..\IJGUIZZZ.obj IJGUIZZZ.obj 80 99999
+# xychop ..\IJGUOZZZ.obj IJGUOZZZ.obj 80 99999
+# but pdld didn't like the object code thus obtained
+# but after massaging like this:
+# rem rem xychop ..\IJJFCIZD.obj IJJFCIZD.obj 0 99999
+# rem xychop ..\IJJFCBZD.obj IJJFCBZD.obj 0 0x73F
+# rem xychop ..\IJGUIZZZ.obj IJGUIZZZ.obj 0 0x4BF
+# xychop ..\IJGUOZZZ.obj IJGUOZZZ.obj 0 0x5AF
+# (I later realized that the end values are too high - they include
+# the beginning of the "/*" comment card, so 16 bytes decimal needs
+# to be subtracted from that)
+# zap IJJFCBZD.obj 0x18 0x00
+# zap IJJFCBZD.obj 0x28 0x01
+# rem hexdump IJJFCBZD.obj 0 64
+# zap IJGUIZZZ.obj 0x18 0x00
+# zap IJGUOZZZ.obj 0x18 0x00
+# It worked!
+# And probably pdld needs to be updated to accept this
+# undocumented extension (ie high nibble of type code
+# set to x'F', for no known reason, and simply needs to
+# be masked out).
+# It ended up being a moot point, as I included that object
+# code, disassembled, in vsesupa.asm for easier management.
+
+
+ifeq "$(targ)" "cms"
+
+CFLAGS=-U__MVS__ -D__CMS__
+EXTRA1=--oformat cms
+EXTRA2= cmsstart.obj cmssupa.obj
+
+
+else ifeq "$(targ)" "mts"
+
+# MTS presents as MVS for now
+CFLAGS=-D__MVS__
+EXTRA1=--oformat mts
+EXTRA2= mtsstart.o mtssupa.o
+
+
+else ifeq "$(targ)" "mus"
+
+# MUSIC/SP presents as MVS for now
+CFLAGS=-D__MVS__
+EXTRA1=--oformat musicsp
+EXTRA2= musstart.obj mussupa.obj
+
+
+else ifeq "$(targ)" "vse"
+
+# VSE presents as MVS for now
+# We probably need to switch to using gccvse.exe though.
+# Similar consideration for CMS
+CFLAGS=-U__MVS__ -D__VSE__
+EXTRA1=--oformat vse
+EXTRA2= vsestart.obj vsesupa.obj
+
+else
+
+CFLAGS=-D__MVS__
+EXTRA1=--oformat mvs --amode 31 --rmode any
+EXTRA2= mvsstart.obj mvssupa.obj
+
+endif
+
+
+CC=gccmvs
+AS=as370 -mhlasm -mebcdic
+
+COPTS=-S -Os -fno-common $(CFLAGS) \
+    -DNOLIBALLOC -D__NOBIVA__ -I . -I../pdpclib -I../src \
+    -fno-builtin
+AR=xar
+LD=pdld --emit-relocs --entry __crt0
+
+
+all: clean pdpclib.a
+
+pdpclib.a: stdio.o string.o stdlib.o \
+       start.o time.o errno.o assert.o signal.o locale.o \
+       ctype.o setjmp.o math.o pdptest.o mvssupc.o
+        rm -f pdpclib.a
+        $(AR) r pdpclib.a stdio.o string.o stdlib.o
+        $(AR) r pdpclib.a start.o time.o errno.o assert.o signal.o
+        $(AR) r pdpclib.a locale.o ctype.o setjmp.o math.o mvssupc.o
+        $(AR) s pdpclib.a
+        $(LD) $(EXTRA1) -o pdptest.exe $(EXTRA2) pdptest.o pdpclib.a
+
+.c.o:
+        $(CC) $(COPTS) -o $*.s $<
+        $(AS) -o $@ $*.s
+        rm -f $*.s
+
+.asm.o:
+        $(AS) -o $@ $<
+
+clean:
+        rm -f pdpclib.a

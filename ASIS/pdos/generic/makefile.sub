@@ -1,0 +1,25 @@
+# Produces win32 executable.
+# Build using SubC (not yet working)
+# Required pdpclib built using makefile.pgo
+
+CC=sccwin
+CFLAGS=
+LD=pdld386
+LDFLAGS=
+AS=pdas
+COPTS=$(CFLAGS) -I. -I../bios -I../pdpclib -I../src -D__PDOS386__ -DNOLIBALLOC -D__NOBIVA__ -DNEED_AOUT
+
+all: clean pdos.exe
+
+pdos.exe: genstart.o pdos.o ../bios/exeload.o ../pdpclib/__memmgr.o ../src/fat.o
+    $(LD) $(LDFLAGS) -N -s -e ___crt0 -o pdos.exe genstart.o pdos.o ../bios/exeload.o ../pdpclib/__memmgr.o ../src/fat.o ../pdpclib/pdosgeno.a
+
+.c.o:
+    pdcc -E -D__SUBC__ -Dunsigned= -Dsigned= -Dlong=int -Dshort=int -Dconst= -Ddouble=int $(COPTS) -o $*.i $<
+    $(CC) -S $*.i
+    rm -f $*.i
+    $(AS) -o $@ $*.s
+    rm -f $*.s
+
+clean:
+    rm -f *.o pdos.exe

@@ -1,0 +1,119 @@
+# This is the makefile for macOS to build pdpclib using
+# the clang compiler for x64.
+
+# -e ___pdpstart (add -arch arm64 to do cross-compile)
+# And e.g. clang -arch x86_64 world.c
+# does a cross-compile for x86_64
+
+# Note that x64 syscalls look like this:
+# mov rax, 0x2000001  (1 = exit)
+# syscall
+# with parameters in rdi, rsi, rdx, r10, r8, r9
+
+# Assembler can be done like this:
+# as -arch x86_64 -o testmac.o testmac.asm
+# ld -static -e fred -o testmac testmac.o
+# ie you can do a static link, and no signing required
+
+# Note that MacOS started supporting 32 and 64-bit apps
+# with version 10.4. But relocations may have only been
+# supported for the 32-bit version. Regardless, the
+# kernel was only 32-bit at this time, so the situation
+# was a bit dubious.
+# With 10.6 there was a 64-bit kernel available, and a
+# form of 64-bit relocation became available.
+# It was LC_DYLD_INFO_ONLY Rebase relocations which are
+# more complicated than chained fixups. The chained
+# fixups became available in 10.8, by which time (since
+# 10.7), only 64-bit applications were supported.
+# Some timeline can be seen here:
+# https://en.wikipedia.org/wiki/MacOS_version_history
+
+ifeq "$(ver)" "old"
+CC=clang -arch x86_64 -mmacosx-version-min=10 \
+    -fno-pie
+else
+CC=clang -arch x86_64 -mmacosx-version-min=10.8
+endif
+
+#CC=gcc -fleading-underscore --no-pie
+COPTS=-c -O2 -fno-builtin -D__MACOS__ \
+    -DXNEED_MPROTECT \
+    -DXUSE_MEMMGR -D__64BIT__ -D__LONG64__ \
+    -I . -fno-stack-protector \
+    -nostdinc \
+    -D__gnu_linux__ \
+    -D__USEBIVA__ \
+
+
+# This has no effect?
+# -mdynamic-no-pic
+
+ifeq "$(ver)" "old"
+AS=clang -c -arch x86_64 -mmacosx-version-min=10
+else
+AS=clang -c -arch x86_64 -mmacosx-version-min=10.8
+endif
+
+AR=ar
+
+# I'm using no_uuid so that the 16-byte UUID
+# doesn't show up when comparing executables. Random
+# numbers are even allowed for this, so shouldn't be
+# an issue. I didn't see an option to set it to NULs
+# The signature still shows up as an extra difference
+# though. I don't know a way around that.
+
+# entry points of both __start and ___start work
+# (underscores are being added to function names for some reason)
+# But __start is the one we want (in linstart), although
+# we may want to use a ___pdpent instead at some point
+
+ifeq "$(altld)" "pdld"
+ifeq "$(ver)" "old"
+LD=pdld --oformat macho -e ___pdpent --image-base 0x400000 \
+    --old-macho
+else
+# because pdld defines LC_MAIN as a command (for
+# historical reasons), we need to switch entry point
+LD=pdld --oformat macho -e __start
+endif
+
+else
+ifeq "$(ver)" "old"
+LD=clang -arch x86_64 -Wl,-no_uuid -Wl,-no_adhoc_codesign \
+    -Wl,-e, -Wl,___pdpent -Wl,-image_base -Wl,0x400000 \
+    -Wl,-no_pie \
+    -Wl,-static \
+    -fno-pie \
+    -mmacosx-version-min=10 \
+    -nostdlib \
+    -Wl,-pagezero_size -Wl,0x4000
+else
+LD=clang -arch x86_64 -Wl,-no_uuid -Wl,-no_adhoc_codesign \
+    -mmacosx-version-min=10.8 \
+    -Wl,-e, -Wl,__start
+endif
+endif
+
+#LD=ld -no_uuid -no_adhoc_codesign
+
+pdptest: linstart.o mx6supa.o pdptest.o stdio.o string.o stdlib.o \
+       start.o time.o errno.o assert.o signal.o locale.o \
+       ctype.o math.o __memmgr.o
+	rm -f pdpmacos.a
+	$(AR) r pdpmacos.a linstart.o mx6supa.o stdio.o string.o stdlib.o
+	$(AR) r pdpmacos.a start.o time.o errno.o assert.o signal.o
+	$(AR) r pdpmacos.a locale.o ctype.o math.o __memmgr.o
+	$(AR) s pdpmacos.a
+	$(LD) -o pdptest linstart.o mx6supa.o pdptest.o pdpmacos.a
+# Avoid warning that executable is already stripped
+ifneq "$(altld)" "pdld"
+        strip pdptest
+endif
+
+.c.o:
+	$(CC) $(COPTS) $<
+
+mx6supa.o: mx6supa.asm
+	$(AS) -o $@ $*.asm

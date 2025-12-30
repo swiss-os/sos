@@ -1,0 +1,37 @@
+# Produces 64-bit LOONGARCH EFI executable.
+# We link with the library produced by makefile.eg6
+
+CC=gcc -U__WIN32__ -D__USEBIVA__
+AR=ar
+AS=as
+ASPARM=
+
+
+LD=pdld --oformat coff -e efimain -s --emit-relocs \
+  --subsystem 10
+
+
+COPTS=-c -O2 -D__LOONG__ -nostdinc -nostdlib -fno-builtin \
+    -D__64BIT__ -I . -fno-stack-protector --no-pie \
+    -D__LONG64__ -mdirect-extern-access \
+    -D__EFI__ -D__EFIBIOS__ -U__gnu_linux__ \
+    -DTARGET_64BIT -DNEED_MZ -DNO_DLLENTRY -DGENSHELL -DNEED_ELF \
+    -D__GENSHELL__ -D__NODECLSPEC__ -DWINNEWMOD -DNOKERNEMUL \
+    -fno-common -ansi -I../pdpclib -I../bios -I../src -I. \
+    -D__NOSTDCALL__
+
+all: clean bios.exe
+
+OBJS=../bios/exeload.o
+
+bios.exe: bios.o $(OBJS)
+    $(LD) -s -subsystem 10 -e efimain -nostdlib --image-base 0x400000 -o bios.exe bios.o $(OBJS) ../pdpclib/pdpefi.lib
+
+.c.o:
+    $(CC) $(COPTS) -o $@ $<
+
+.asm.o:
+    $(AS) -o $@ $<
+
+clean:
+    rm -f *.o bios.exe

@@ -1,0 +1,46 @@
+# Produces 64-bit ARM EFI executable.
+# We link with the library produced by makefile.ua6
+# And we use makefile.pa6 and makecomm.pa6
+# which are PE. Also makecomm.a64 (ELF) works
+
+# We need this executable to load below the 4 GiB mark.
+# So we use the image-base keyword on the link step
+
+ifeq "$(tools)" "macwin"
+CC=aarch64-none-elf-gcc -D__LONG64__
+AR=aarch64-none-elf-ar
+AS=aarch64-none-elf-as
+ASPARM=--defsym ELF=1
+
+else ifeq "$(tools)" "mingw64"
+CC=gcc -U__WIN32__ -D__USEBIVA__
+AR=ar
+AS=as
+ASPARM=
+endif
+
+
+LD=pdld --no-insert-timestamp
+
+COPTS=--no-pie -D__EFI__ -D__EFIBIOS__ -c -O2 -D__ARM__ \
+    -fno-builtin -D__64BIT__ -I . -fno-stack-protector -U__gnu_linux__ \
+    -fno-common -ansi -I../pdpclib -I../bios -I../src -DNEED_MACHO \
+    -DTARGET_64BIT -DNEED_MZ -DNO_DLLENTRY -DGENSHELL -DNEED_ELF \
+    -D__GENSHELL__ -D__NODECLSPEC__ -DWINNEWMOD -DNOKERNEMUL
+
+
+all: clean bios.exe
+
+OBJS=../bios/exeload.o
+
+bios.exe: bios.o $(OBJS)
+    $(LD) -s -subsystem 10 -e efimain -nostdlib --image-base 0x400000 -o bios.exe bios.o $(OBJS) ../pdpclib/pdpefi.a
+
+.c.o:
+    $(CC) $(COPTS) -o $@ $<
+
+.asm.o:
+    $(AS) -o $@ $<
+
+clean:
+    rm -f *.o bios.exe

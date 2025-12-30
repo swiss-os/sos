@@ -1,0 +1,26 @@
+# Produces Linux executable
+# You should have built pdpclib with makefile.lnp first
+
+CC=gccwin -U__WIN32__
+CFLAGS=-O2 -D__gnu_linux__ -D__NOBIVA__ -DNEED_AOUT \
+    -DNEED_MZ -DNO_DLLENTRY -DW32EMUL -D__W32EMUL__ \
+    -DNEED_OS2 \
+    -D__32BIT__ -DHAVE_DIR
+LD=pdld
+LDFLAGS=--no-insert-timestamp --oformat elf --emit-relocs
+AS=pdas --oformat coff
+AR=xar
+COPTS=-S $(CFLAGS) -ansi -I . -I../bios -I../pdpclib -I../src
+
+all: clean bios
+
+bios: bios.o list.o ../bios/exeload.o ../src/doscalls.o ../src/patmat.o
+  $(LD) $(LDFLAGS) -s -nostdlib -e __start -o bios.exe ../pdpclib/linstart.o bios.o list.o ../bios/exeload.o ../src/doscalls.o ../src/patmat.o ../pdpclib/pdplinux.a
+
+.c.o:
+    $(CC) $(COPTS) -I../bios -o $*.s $<
+    $(AS) -o $@ $*.s
+    rm -f $*.s
+
+clean:
+    rm -f *.o bios

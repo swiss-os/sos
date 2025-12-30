@@ -1,0 +1,33 @@
+# This is the makefile to build a RISC-V 64-bit Linux ELF executable
+# using gcc
+#
+
+CC=gcc
+COPTS=-c -O2 -fno-builtin -nostdlib -nostdinc -I . -fno-stack-protector \
+    --no-pie -D__NOBIVA__ \
+    -D__gnu_linux__ -D__GENSHELL__ \
+    -D__RISCV__ -D__64BIT__ -D__LONG64__
+
+LD=ld --emit-relocs -e __pdpent
+#LD=pdld --no-insert-timestamp
+
+AR=ar
+STRIP=strip
+
+
+pdptest: linstart.o rv6supa.o pdptest.o stdio.o string.o stdlib.o \
+       start.o time.o errno.o assert.o signal.o locale.o \
+       ctype.o setjmp.o math.o __memmgr.o
+	rm -f pdplinux.a
+	$(AR) r pdplinux.a linstart.o rv6supa.o stdio.o string.o stdlib.o
+	$(AR) r pdplinux.a start.o time.o errno.o assert.o signal.o
+	$(AR) r pdplinux.a locale.o ctype.o setjmp.o math.o __memmgr.o
+        $(AR) s pdplinux.a
+        $(LD) -o pdptest.exe rv6supa.o linstart.o pdptest.o pdplinux.a
+        $(STRIP) --strip-unneeded pdptest.exe
+
+.c.o:
+	$(CC) $(COPTS) $<
+
+rv6supa.o: rv6supa.asm
+	as -o $@ $*.asm
